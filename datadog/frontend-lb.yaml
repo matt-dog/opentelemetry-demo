@@ -1,0 +1,21 @@
+# Public LoadBalancer for the Astronomy Shop (frontend-proxy).
+#
+# Kept outside the chart because the chart's Service template has no
+# loadBalancerSourceRanges. The proxy also serves /feature (the flag UI), so the
+# allowed ranges matter: anyone who can reach it can break the demo.
+#
+# up.sh fills ALLOW_CIDRS (default: the presenter's current public IP /32).
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-proxy-public
+  namespace: otel-demo
+spec:
+  type: LoadBalancer
+  selector:
+    opentelemetry.io/name: frontend-proxy
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  loadBalancerSourceRanges: [ALLOW_CIDRS]

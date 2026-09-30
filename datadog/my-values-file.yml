@@ -1,0 +1,420 @@
+# Datadog values for the opentelemetry-demo Helm chart (OTLP path).
+#
+# Sends traces, metrics and logs to Datadog's OTLP intake with the otlp_http
+# exporter and the span_metrics connector, the setup Datadog's docs now recommend
+# for a self-managed Collector:
+#   https://docs.datadoghq.com/opentelemetry/setup/collector_exporter/
+# The Datadog extension stays for Fleet Automation.
+#
+# Built on chart 0.42.1 (collector-contrib 0.160.0). The chart ships its own
+# pipelines for Jaeger, Prometheus, OpenSearch and Grafana; they are kept, and the
+# Datadog pieces are added beside them. Arrays replace on merge, so every list here
+# must be complete.
+#
+#   traces            chart processors -> Jaeger, chart span_metrics (Prometheus),
+#                     forward/traces_sample and span_metrics/datadog
+#   traces/datadog    forward/traces_sample -> Datadog
+#   metrics           chart receivers -> Prometheus, forward/metrics_datadog
+#   metrics/chart_span_metrics     chart span_metrics -> Prometheus only
+#   metrics/datadog   cumulative -> delta (+ rates) -> Datadog
+#   metrics/span_metrics_datadog   span_metrics/datadog -> Datadog
+#   logs              OTLP app logs + Kafka/Postgres/Valkey container logs
+#                     -> OpenSearch and Datadog
+#
+# Kafka metrics are collected once, by the cluster collector
+# (cluster-collector.yaml), because the docs require a single replica for the
+# kafkametrics receiver:
+#   https://docs.datadoghq.com/opentelemetry/integrations/kafka_metrics/
+#
+# The cluster name and env here must match cluster-collector.yaml.
+#
+# Secrets come from the dd-secrets Secret (DD_SITE_PARAMETER, DD_API_KEY). Nothing
+# sensitive belongs in this file.
+
+components:
+  # Browsers load the shop from the public URL, so the browser tracer must post to
+  # that same origin. The chart default (http://localhost:8080/...) only works with
+  # a port-forward.
+  frontend:
+    envOverrides:
+      - name: PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+        value: /otlp-http/v1/traces
+
+  # Full metric set from the Postgres integration doc. This annotation replaces the
+  # chart's whole discovery config, so it keeps the chart's credentials and tls.
+  #   https://docs.datadoghq.com/opentelemetry/integrations/postgres_metrics/
+  astronomy-db:
+    podAnnotations:
+      resource.opentelemetry.io/service.namespace: opentelemetry-demo
+      io.opentelemetry.discovery.metrics/enabled: "true"
+      io.opentelemetry.discovery.metrics/scraper: postgresql
+      io.opentelemetry.discovery.metrics/config: |
+        username: monitoring_user
+        password: monitoring_password
+        collection_interval: 15s
+        metrics:
+          postgresql.blks_hit:
+            enabled: true
+          postgresql.blks_read:
+            enabled: true
+          postgresql.database.locks:
+            enabled: true
+          postgresql.deadlocks:
+            enabled: true
+          postgresql.function.calls:
+            enabled: true
+          postgresql.sequential_scans:
+            enabled: true
+          postgresql.temp_files:
+            enabled: true
+          postgresql.temp.io:
+            enabled: true
+          postgresql.tup_deleted:
+            enabled: true
+          postgresql.tup_fetched:
+            enabled: true
+          postgresql.tup_inserted:
+            enabled: true
+          postgresql.tup_returned:
+            enabled: true
+          postgresql.tup_updated:
+            enabled: true
+          postgresql.wal.delay:
+            enabled: true
+        tls:
+          insecure: true
+
+opentelemetry-collector:
+  extraEnvsFrom:
+    - secretRef:
+        name: dd-secrets
+  # Pod logs under /var/log/pods are root:root 0640 on GKE; the filelog receiver
+  # cannot read them as the image's default non-root user.
+  securityContext:
+    runAsUser: 0
+    runAsGroup: 0
+  # The kubelet's /metrics/cadvisor endpoint (prometheus/cadvisor) needs
+  # nodes/metrics; the chart's presets only grant nodes/stats.
+  clusterRole:
+    rules:
+      - apiGroups: [""]
+        resources: ["nodes/metrics"]
+        verbs: ["get"]
+  config:
+    receivers:
+      # Host metrics: scrapers and optional metrics from the recommended Kubernetes
+      # config, merged into the chart's existing receiver.
+      hostmetrics:
+        scrapers:
+          cpu:
+            metrics:
+              system.cpu.utilization:
+                enabled: true
+              system.cpu.physical.count:
+                enabled: true
+              system.cpu.logical.count:
+                enabled: true
+              system.cpu.frequency:
+                enabled: true
+          memory:
+            metrics:
+              system.memory.limit:
+                enabled: true
+          paging:
+            metrics:
+              system.paging.utilization:
+                enabled: true
+              system.paging.usage:
+                enabled: true
+          filesystem:
+            metrics:
+              system.filesystem.utilization:
+                enabled: true
+          processes:
+
+      # Container metrics from the kubelet's cAdvisor endpoint on this node, from
+      # the node collector in DataDog/opentelemetry-examples
+      # (guides/kubernetes/configuration/daemonset-collector.yaml), verbatim apart
+      # from the receiver name. Feeds the container widgets on the Kubernetes
+      # dashboards.
+      prometheus/cadvisor:
+        config:
+          scrape_configs:
+            - job_name: kubelet-cadvisor
+              scheme: https
+              metrics_path: /metrics/cadvisor
+              scrape_interval: 15s
+              scrape_timeout: 10s
+              honor_labels: true
+              honor_timestamps: true
+              authorization:
+                type: Bearer
+                credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              tls_config:
+                insecure_skip_verify: true
+              kubernetes_sd_configs:
+                - role: node
+                  selectors:
+                    - role: node
+                      field: metadata.name=${env:K8S_NODE_NAME}
+              relabel_configs:
+                - action: replace
+                  replacement: kubelet
+                  target_label: job
+                - action: replace
+                  source_labels: [__meta_kubernetes_node_name]
+                  target_label: node
+              metric_relabel_configs:
+                - source_labels: [__name__]
+                  regex: container_cpu_(load_average_10s)
+                  action: drop
+                - source_labels: [__name__]
+                  regex: container_fs_(io_current|reads_merged_total|sector_reads_total|sector_writes_total|writes_merged_total)
+                  action: drop
+                - source_labels: [__name__]
+                  regex: container_memory_(mapped_file|swap)
+                  action: drop
+                - source_labels: [__name__]
+                  regex: container_(file_descriptors|tasks_state|threads_max)
+                  action: drop
+                - source_labels: [__name__]
+                  regex: container_spec_(cpu_period|cpu_quota|cpu_shares|memory_reservation_limit_bytes|memory_swap_limit_bytes)
+                  action: drop
+                - source_labels: [__name__]
+                  regex: container_network_.*
+                  action: drop
+                - source_labels: [id, pod]
+                  regex: .+;
+                  action: drop
+                - source_labels: [container]
+                  regex: ^(POD)?$
+                  action: drop
+
+      # Container logs for the three infrastructure services. The app services
+      # already send logs over OTLP, so collecting every pod would duplicate them.
+      filelog/infra:
+        include:
+          - /hostfs/var/log/pods/otel-demo_kafka-*/kafka/*.log
+          - /hostfs/var/log/pods/otel-demo_astronomy-db-*/astronomy-db/*.log
+          - /hostfs/var/log/pods/otel-demo_valkey-cart-*/valkey-cart/*.log
+        start_at: end
+        include_file_path: true
+        operators:
+          - type: container
+            id: container-parser
+
+    processors:
+      resource:
+        attributes:
+          - key: service.instance.id
+            from_attribute: k8s.pod.uid
+            action: insert
+          - key: deployment.environment.name
+            value: "otel-demo-gke"
+            action: upsert
+          - key: k8s.cluster.name
+            value: "otel-demo-gke"
+            action: upsert
+      # host.name is the GKE node. The system detector alone reports the collector
+      # pod name, which breaks trace-to-host correlation. Uses k8s.node.name where
+      # k8s_attributes or k8s_cluster set it, otherwise the collector's own node
+      # (right for host metrics, and for app telemetry because the otel-collector
+      # Service uses internalTrafficPolicy: Local).
+      transform/host_name:
+        error_mode: ignore
+        trace_statements: &host_name
+          - context: resource
+            statements:
+              - set(resource.attributes["host.name"], resource.attributes["k8s.node.name"]) where resource.attributes["k8s.node.name"] != nil
+              - set(resource.attributes["host.name"], "${env:K8S_NODE_NAME}") where resource.attributes["k8s.node.name"] == nil
+        metric_statements: *host_name
+        log_statements: *host_name
+      # Log sources the Datadog integration pipelines and dashboards key on.
+      # Kafka: ddtags source:kafka (kafka_metrics doc). Postgres:
+      # datadog.log.source postgresql (postgres_metrics doc). Valkey: not in the
+      # docs; tagged as redis so the Redis log pipeline can parse it.
+      transform/log_source:
+        error_mode: ignore
+        log_statements:
+          - context: log
+            statements:
+              - set(log.attributes["ddtags"], "source:kafka") where resource.attributes["k8s.container.name"] == "kafka"
+              - set(log.attributes["ddtags"], "source:redis") where resource.attributes["k8s.container.name"] == "valkey-cart"
+          - context: resource
+            statements:
+              - set(resource.attributes["datadog.log.source"], "postgresql") where resource.attributes["k8s.container.name"] == "astronomy-db"
+              - set(resource.attributes["service.name"], resource.attributes["k8s.container.name"]) where resource.attributes["service.name"] == nil and resource.attributes["k8s.container.name"] != nil
+      # Datadog's OTLP metrics intake accepts delta only.
+      cumulativetodelta: {}
+      deltatorate:
+        metrics:
+          - k8s.pod.network.io
+          - k8s.pod.network.errors
+          - postgresql.tup_returned
+          - postgresql.tup_fetched
+          - postgresql.tup_inserted
+          - postgresql.tup_updated
+          - postgresql.tup_deleted
+          - postgresql.operations
+          - postgresql.commits
+          - postgresql.rollbacks
+          - postgresql.blks_hit
+          - postgresql.blks_read
+          - postgresql.temp_files
+          - postgresql.temp.io
+          - postgresql.function.calls
+          - postgresql.index.scans
+          - postgresql.sequential_scans
+          - postgresql.blocks_read
+
+      # cAdvisor processors from the same reference node collector.
+      deltatorate/cadvisor:
+        metrics:
+          - container_cpu_usage_seconds_total
+          - container_cpu_cfs_periods_total
+          - container_cpu_cfs_throttled_periods_total
+          - container_cpu_cfs_throttled_seconds_total
+          - container_cpu_system_seconds_total
+          - container_cpu_user_seconds_total
+          - container_fs_reads_bytes_total
+          - container_fs_writes_bytes_total
+      transform/cadvisor_labels:
+        metric_statements:
+          - context: datapoint
+            statements:
+              - set(attributes["k8s.pod.name"], attributes["pod"]) where attributes["pod"] != nil
+              - set(attributes["k8s.namespace.name"], attributes["namespace"]) where attributes["namespace"] != nil
+              - set(attributes["k8s.container.name"], attributes["container"]) where attributes["container"] != nil
+              - set(attributes["container.id"], attributes["name"]) where attributes["container"] != nil
+              - set(attributes["container.image.name"], attributes["image"]) where attributes["container"] != nil
+              - delete_key(attributes, "pod")
+              - delete_key(attributes, "namespace")
+              - delete_key(attributes, "container")
+              - delete_key(attributes, "name")
+              - delete_key(attributes, "image")
+              - delete_key(attributes, "id")
+          - context: resource
+            statements:
+              - delete_key(attributes, "service.name")
+              - delete_key(attributes, "service.instance.id")
+      groupbyattrs/cadvisor:
+        keys:
+          - k8s.pod.name
+          - k8s.namespace.name
+          - k8s.container.name
+          - container.id
+
+    connectors:
+      # From the recommended setup, verbatim.
+      forward/traces_sample: {}
+      forward/metrics_datadog: {}
+      span_metrics/datadog:
+        aggregation_temporality: AGGREGATION_TEMPORALITY_DELTA
+        add_resource_attributes: true
+        histogram:
+          exponential: {}
+          unit: s
+        dimensions:
+          ## Unified Service Tagging
+          - name: deployment.environment.name
+          - name: service.version
+          - name: http.response.status_code
+          ## Container tags
+          - name: container.id
+          ## Host name inference
+          - name: aws.ecs.launchtype
+          - name: aws.ecs.task.arn
+          - name: cloud.provider
+          - name: cloud.account.id
+          - name: host.id
+          - name: host.name
+          - name: k8s.node.name
+          - name: k8s.cluster.name
+          - name: azure.resourcegroup.name
+          ## Peer service inference
+          - name: aws.s3.bucket
+          - name: db.namespace
+          - name: messaging.destination.name
+          - name: messaging.system
+          - name: server.address
+          ## Operation name inference
+          - name: operation.name
+          - name: http.request.method
+          - name: http.method
+          - name: db.system
+          - name: messaging.operation
+          - name: rpc.system
+          - name: rpc.service
+          - name: faas.invoked_provider
+          - name: faas.invoked_name
+          - name: faas.trigger
+          - name: graphql.operation.type
+          - name: network.protocol.name
+          ## Resource name inference
+          - name: resource.name
+          - name: http.route
+          - name: messaging.destination
+          - name: rpc.method
+          - name: graphql.operation.name
+          - name: db.statement
+          - name: db.query.text
+
+    exporters:
+      otlp_http/datadog:
+        endpoint: https://otlp.${env:DD_SITE_PARAMETER}
+        headers:
+          dd-api-key: ${env:DD_API_KEY}
+          dd-otel-metric-config: >-
+            {
+            "resource_attributes_as_tags": true,
+            "instrumentation_scope_metadata_as_tags": true
+            }
+        compression: zstd
+        compression_params:
+          level: 3
+        sending_queue:
+          batch:
+            sizer: bytes
+            min_size: 2097152
+            max_size: 4194304
+
+    extensions:
+      datadog:
+        api:
+          site: ${env:DD_SITE_PARAMETER}
+          key: ${env:DD_API_KEY}
+        deployment_type: daemonset
+
+    service:
+      extensions: [health_check, opamp, k8s_observer, k8s_leader_elector/k8s_cluster, datadog]
+      pipelines:
+        traces:
+          processors: [k8s_attributes, memory_limiter, resource_detection, transform/host_name, resource, transform/sanitize_spans, gen_ai_normalizer, transform/redact_sensitive_data, redaction]
+          exporters: [otlp_grpc/jaeger, debug, span_metrics, forward/traces_sample, span_metrics/datadog]
+        traces/datadog:
+          receivers: [forward/traces_sample]
+          exporters: [otlp_http/datadog]
+        metrics:
+          receivers: [otlp, prometheus/ad, receiver_creator/metrics, hostmetrics, kubeletstats, k8s_cluster]
+          processors: [k8s_attributes, memory_limiter, resource_detection, transform/host_name, resource]
+          exporters: [otlp_http/prometheus, debug, forward/metrics_datadog]
+        # The chart's own span_metrics connector feeds Prometheus/Grafana only.
+        # Datadog gets span_metrics/datadog instead.
+        metrics/chart_span_metrics:
+          receivers: [span_metrics]
+          exporters: [otlp_http/prometheus]
+        metrics/datadog:
+          receivers: [forward/metrics_datadog]
+          processors: [cumulativetodelta, deltatorate]
+          exporters: [otlp_http/datadog]
+        metrics/span_metrics_datadog:
+          receivers: [span_metrics/datadog]
+          exporters: [otlp_http/datadog]
+        metrics/cadvisor:
+          receivers: [prometheus/cadvisor]
+          processors: [memory_limiter, transform/cadvisor_labels, groupbyattrs/cadvisor, transform/host_name, resource, cumulativetodelta, deltatorate/cadvisor]
+          exporters: [otlp_http/datadog]
+        logs:
+          receivers: [otlp, filelog/infra]
+          processors: [k8s_attributes, memory_limiter, resource_detection, transform/host_name, resource, transform/log_source, transform/sanitize_logs]
+          exporters: [opensearch, debug, otlp_http/datadog]

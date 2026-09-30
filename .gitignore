@@ -58,3 +58,7 @@ src/frontend/cypress/screenshots
 src/shipping/target/
 
 !src/currency/build
+
+# Datadog demo: local secrets (op:// references only)
+datadog/.env
+datadog/.exporter-path-backup/
