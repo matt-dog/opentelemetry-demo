@@ -121,7 +121,8 @@ v3 only changes metrics.
 
 ## Caveats to state with any number
 
-- The Astronomy Shop is one workload. Ratios depend on payload shape: tag
+- The Astronomy Shop is one workload, driven by Locust HTTP users only (browser
+  users are off: headless Chromium does not fit at 200 users). Ratios depend on payload shape: tag
   cardinality, log size, span attributes.
 - Staging intake, not production. Payload encoding is the same; network paths
   differ.

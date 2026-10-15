@@ -32,6 +32,21 @@ components:
         value: "$LOCUST_USERS"
       - name: LOCUST_SPAWN_RATE
         value: "10"
+      # Browser users are headless Chromium (1 in 10 by default); ~20 of them
+      # OOM the pod at 200 users. HTTP users carry the shop's traffic.
+      - name: LOCUST_BROWSER_TRAFFIC_ENABLED
+        value: "false"
+    # The chart's 1500Mi OOMs at 200 users.
+    resources:
+      limits:
+        memory: 4Gi
+# The demo's Prometheus OOMs at its 400Mi under the heavier load. It is not on the
+# measured path, but a crash loop adds noise on the default pool.
+prometheus:
+  server:
+    resources:
+      limits:
+        memory: 1536Mi
 EOF
 # up.sh only resizes a sleeping cluster, so grow an awake one here first.
 # common.sh already defaulted NUM_NODES to 2, so the bench size has its own name.
