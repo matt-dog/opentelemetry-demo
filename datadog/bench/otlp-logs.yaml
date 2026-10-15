@@ -16,13 +16,21 @@ processors:
     - key: deployment.environment.name
       value: ${env:BENCH_ENV}
       action: upsert
+  transform/bench_host:
+    error_mode: ignore
+    trace_statements: &id001
+    - context: resource
+      statements:
+      - set(resource.attributes["host.name"], Concat([resource.attributes["host.name"], "${env:BENCH_HOST_SUFFIX}"], "")) where resource.attributes["host.name"] != nil
+      - set(resource.attributes["datadog.host.name"], resource.attributes["host.name"]) where resource.attributes["host.name"] != nil
+    metric_statements: *id001
+    log_statements: *id001
 exporters:
   otlp_http/datadog:
     endpoint: https://otlp.${env:DD_SITE}
     headers:
       dd-api-key: ${env:DD_API_KEY}
-      dd-otel-metric-config: '{ "resource_attributes_as_tags": true, "instrumentation_scope_metadata_as_tags":
-        true }'
+      dd-otel-metric-config: '{ "resource_attributes_as_tags": true, "instrumentation_scope_metadata_as_tags": true }'
     compression: zstd
     compression_params:
       level: 3
@@ -48,5 +56,6 @@ service:
       processors:
       - memory_limiter
       - resource/bench
+      - transform/bench_host
       exporters:
       - otlp_http/datadog

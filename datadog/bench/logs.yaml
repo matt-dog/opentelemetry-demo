@@ -17,10 +17,26 @@ processors:
       - key: deployment.environment.name
         value: ${env:BENCH_ENV}
         action: upsert
+  # Run 2 on: large batches on every arm, so batching is equal and the
+  # comparison isolates format and compression. Run 1 (tag run1-docs-defaults)
+  # used the docs' Datadog Exporter values: 10 to 100 items.
   batch:
-    send_batch_max_size: 100
-    send_batch_size: 10
+    send_batch_size: 8192
+    send_batch_max_size: 8192
     timeout: 10s
+  # A fixed-length suffix per arm (-b1 to -b6) on host.name, copied to
+  # datadog.host.name, which outranks k8s.node.name in Datadog's host mapping.
+  # All arms see the same GKE nodes, so without it each node collects every arm's
+  # env as a host tag and Datadog mixes the envs.
+  transform/bench_host:
+    error_mode: ignore
+    trace_statements: &bench_host
+      - context: resource
+        statements:
+          - set(resource.attributes["host.name"], Concat([resource.attributes["host.name"], "${env:BENCH_HOST_SUFFIX}"], "")) where resource.attributes["host.name"] != nil
+          - set(resource.attributes["datadog.host.name"], resource.attributes["host.name"]) where resource.attributes["host.name"] != nil
+    metric_statements: *bench_host
+    log_statements: *bench_host
 
 exporters:
   datadog/exporter:
@@ -41,5 +57,5 @@ service:
   pipelines:
     logs:
       receivers: [otlp]
-      processors: [memory_limiter, resource/bench, batch]
+      processors: [memory_limiter, resource/bench, transform/bench_host, batch]
       exporters: [datadog/exporter]

@@ -15,7 +15,7 @@ load_env
 
 LOCUST_USERS="${LOCUST_USERS:-200}"
 BENCH_MACHINE_TYPE="n2-standard-4"   # n2, not e2: steadier CPU for the CPU numbers
-ARMS=(contrib contribotlp ddot ddotv2 ddotdefault)
+ARMS=(contrib contribotlp ddot ddotv2 ddotdefault contribotlpeq)
 CONTRIB_IMAGE="otel/opentelemetry-collector-contrib:0.159.0"   # the upstream version DDOT 7.84.3 embeds
 DDOT_IMAGE="datadog/ddot-collector:7.84.3"
 PROFILER="${PROFILER:-1}"            # 0 skips the Full Host Profiler
@@ -90,12 +90,28 @@ done
 kubectl -n "$NAMESPACE" create configmap bench-config \
   --from-file="$BENCH/traces.yaml" --from-file="$BENCH/metrics.yaml" --from-file="$BENCH/logs.yaml" \
   --from-file="$BENCH/otlp-traces.yaml" --from-file="$BENCH/otlp-metrics.yaml" --from-file="$BENCH/otlp-logs.yaml" \
+  --from-file="$BENCH/otlpeq-traces.yaml" --from-file="$BENCH/otlpeq-metrics.yaml" --from-file="$BENCH/otlpeq-logs.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
 # Every arm gets the same config, resources and node shape. Only the image, its
 # args and these env vars differ.
-# contribotlp runs the OTLP path's own configs (otlp-<signal>.yaml).
-arm_conf() { case "$1" in contribotlp) echo "otlp-$2.yaml" ;; *) echo "$2.yaml" ;; esac; }
+# contribotlp runs the OTLP path's docs configs (otlp-<signal>.yaml);
+# contribotlpeq the same with equal batching (otlpeq-<signal>.yaml).
+arm_conf() {
+  case "$1" in
+    contribotlp)   echo "otlp-$2.yaml" ;;
+    contribotlpeq) echo "otlpeq-$2.yaml" ;;
+    *)             echo "$2.yaml" ;;
+  esac
+}
+# Fixed-length host.name suffix per arm, so the arms' env tags stay apart in
+# Datadog without giving any arm a longer hostname to send.
+arm_suffix() {
+  case "$1" in
+    contrib) echo -b1 ;; contribotlp) echo -b2 ;; ddot) echo -b3 ;;
+    ddotv2) echo -b4 ;; ddotdefault) echo -b5 ;; contribotlpeq) echo -b6 ;;
+  esac
+}
 arm_image() { case "$1" in contrib*) echo "$CONTRIB_IMAGE" ;; *) echo "$DDOT_IMAGE" ;; esac; }
 arm_args() {
   case "$1" in
@@ -155,6 +171,7 @@ spec:
             - {name: telemetry, containerPort: 8888}
           env:
             - {name: BENCH_ENV, value: bench-$arm}
+            - {name: BENCH_HOST_SUFFIX, value: "$(arm_suffix "$arm")"}
             - name: DD_API_KEY
               valueFrom: {secretKeyRef: {name: datadog-secret, key: api-key}}
             - name: DD_SITE

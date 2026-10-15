@@ -1,0 +1,87 @@
+# Benchmark collector, metrics, OTLP path with equal batching (contribotlpeq arm).
+# See BENCHMARK.md. Same as otlp-metrics.yaml except batching: the batch processor
+# at the Datadog Exporter arms' run 2 values (8192 items, 10s) in place of the
+# docs' exporter-side 2 to 4 MB byte batching. Splits the OTLP arm's gain into
+# protocol and batch size.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 64
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resource/bench:
+    attributes:
+    - key: deployment.environment.name
+      value: ${env:BENCH_ENV}
+      action: upsert
+  cumulativetodelta: {}
+  transform/bench_host:
+    error_mode: ignore
+    trace_statements: &id001
+    - context: resource
+      statements:
+      - set(resource.attributes["host.name"], Concat([resource.attributes["host.name"], "${env:BENCH_HOST_SUFFIX}"], "")) where resource.attributes["host.name"] != nil
+      - set(resource.attributes["datadog.host.name"], resource.attributes["host.name"]) where resource.attributes["host.name"] != nil
+    metric_statements: *id001
+    log_statements: *id001
+  deltatorate:
+    metrics:
+    - k8s.pod.network.io
+    - k8s.pod.network.errors
+    - postgresql.tup_returned
+    - postgresql.tup_fetched
+    - postgresql.tup_inserted
+    - postgresql.tup_updated
+    - postgresql.tup_deleted
+    - postgresql.operations
+    - postgresql.commits
+    - postgresql.rollbacks
+    - postgresql.blks_hit
+    - postgresql.blks_read
+    - postgresql.temp_files
+    - postgresql.temp.io
+    - postgresql.function.calls
+    - postgresql.index.scans
+    - postgresql.sequential_scans
+    - postgresql.blocks_read
+  batch:
+    send_batch_size: 8192
+    send_batch_max_size: 8192
+    timeout: 10s
+exporters:
+  otlp_http/datadog:
+    endpoint: https://otlp.${env:DD_SITE}
+    headers:
+      dd-api-key: ${env:DD_API_KEY}
+      dd-otel-metric-config: '{ "resource_attributes_as_tags": true, "instrumentation_scope_metadata_as_tags": true }'
+    compression: zstd
+    compression_params:
+      level: 3
+service:
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+      - pull:
+          exporter:
+            prometheus:
+              host: 0.0.0.0
+              port: 8888
+  pipelines:
+    metrics:
+      receivers:
+      - otlp
+      processors:
+      - memory_limiter
+      - resource/bench
+      - transform/bench_host
+      - cumulativetodelta
+      - deltatorate
+      - batch
+      exporters:
+      - otlp_http/datadog

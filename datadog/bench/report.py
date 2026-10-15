@@ -22,10 +22,11 @@ import sys
 ACK_RATIO = 66 / (2 * 1448)
 ITEMS = {"traces": "spans", "metrics": "metric_points", "logs": "log_records"}
 BASELINE = "contrib"
-ARM_ORDER = ["contrib", "contribotlp", "ddot", "ddotv2", "ddotdefault"]
+ARM_ORDER = ["contrib", "contribotlp", "contribotlpeq", "ddot", "ddotv2", "ddotdefault"]
 ARM_LABEL = {
     "contrib": "contrib 0.159.0 + datadog exporter",
-    "contribotlp": "contrib 0.159.0 + otlp_http (zstd)",
+    "contribotlp": "contrib 0.159.0 + otlp_http (zstd, docs batching)",
+    "contribotlpeq": "contrib 0.159.0 + otlp_http (zstd, equal batching)",
     "ddot": "DDOT 7.84.3 standalone (converter off)",
     "ddotv2": "DDOT, v2 + zlib/gzip forced (converter off)",
     "ddotdefault": "DDOT 7.84.3 standalone (image defaults)",
