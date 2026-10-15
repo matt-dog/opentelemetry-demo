@@ -1,0 +1,44 @@
+# Overlay for the opentelemetry-examples kube-stack installer (ddot flow): the
+# Operator-managed DDOT daemon collector also feeds the Astronomy Shop's own
+# backends, so the shop keeps Jaeger and Grafana while Datadog gets everything.
+# See README.md.
+#
+#   DD_INSTALL_FLOW=ddot ... ./install <path to this file>
+#
+# Arrays replace on merge, so each exporter list below is complete.
+collectors:
+  daemon:
+    config:
+      receivers:
+        otlp:
+          protocols:
+            http:
+              # The shop's browser tracer posts through frontend-proxy.
+              cors:
+                allowed_origins: ["http://*", "https://*"]
+                allowed_headers: [content-type, traceparent, baggage]
+      connectors:
+        # RED metrics for the shop's Grafana dashboards, as the demo chart does.
+        span_metrics: {}
+      exporters:
+        otlp_grpc/jaeger:
+          endpoint: jaeger.otel-demo.svc.cluster.local:4317
+          tls:
+            insecure: true
+        otlp_http/prometheus:
+          endpoint: http://prometheus.otel-demo.svc.cluster.local:9090/api/v1/otlp
+          tls:
+            insecure: true
+      service:
+        pipelines:
+          # Every trace, before the Datadog sampling pipeline.
+          traces:
+            exporters: [datadog/connector, otlp_grpc/jaeger, span_metrics]
+          # Prometheus takes cumulative metrics; the Datadog pipeline converts to
+          # delta, so the shop's metrics reach Prometheus on their own pipeline.
+          metrics/prometheus:
+            receivers: [otlp]
+            exporters: [otlp_http/prometheus]
+          metrics/span_metrics_prometheus:
+            receivers: [span_metrics]
+            exporters: [otlp_http/prometheus]
