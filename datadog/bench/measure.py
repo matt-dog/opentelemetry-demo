@@ -3,7 +3,7 @@
 
     python3 -I bench/measure.py <run> <phase>     e.g.  run1 start, run1 end
 
-Writes bench/results/<run>/<phase>.json with, for every benchmark pod:
+Writes bench/results/<run>/<phase>.json with, for every benchmark pod and idle twin:
   - kubelet stats/summary: pod network rx/tx bytes, CPU core-seconds, working set
   - the collector's own telemetry on :8888: items received and sent per signal
   - the tee's per-exporter sent and failed counts, to prove every arm got the same input
@@ -69,7 +69,7 @@ def main():
     if len(sys.argv) != 3:
         sys.exit(__doc__)
     run, phase = sys.argv[1], sys.argv[2]
-    pods = json.loads(kubectl("get", "pods", "-l", "app=bench", "-o", "json"))["items"]
+    pods = json.loads(kubectl("get", "pods", "-l", "app in (bench,bench-idle)", "-o", "json"))["items"]
     summaries = {}
     snap = {"taken": time.time(), "taken_iso": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "pods": {}}
     for p in pods:
@@ -84,6 +84,7 @@ def main():
         cs = next(iter(p["status"].get("containerStatuses", [])), {})
         snap["pods"][meta["name"]] = {
             "arm": meta["labels"]["bench-arm"],
+            "idle": meta["labels"]["app"] == "bench-idle",
             "signal": meta["labels"]["bench-signal"],
             "uid": meta["uid"],
             "node": node,

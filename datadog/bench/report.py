@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """Turn two measure.py snapshots into the comparison. See BENCHMARK.md.
 
-    python3 -I bench/report.py bench/results/<run> [--usd-per-gb 0.09]
+    python3 -I bench/report.py bench/results/<run> [--from start --to end] [--usd-per-gb 0.09]
 
-Reads start.json and end.json, prints a Markdown report and saves it as
-report.md beside them. Every number is end minus start for the same pod.
+Reads two snapshots (default start.json and end.json), prints a Markdown report
+and saves it as report.md (or report-<from>-<to>.md) beside them. Every number
+is the later snapshot minus the earlier one for the same pod.
 
-Comparisons are per item (bytes per span, data point, log record), so an arm
-that lost input cannot look better than it is. Input gaps over 1% are flagged.
+Comparisons are per item (bytes per span, data point, log record). Items are
+what the tee sent to that arm, which is the same input for every arm. The arm's
+own receiver count is a cross-check: a receiver the arm adds itself (DDOT's
+converter adds a Prometheus scrape of its own telemetry) would inflate it.
+
+Idle twins (same image and config, no input) give each arm's fixed egress:
+traffic outside the measured pipeline. It is shown as a share of the loaded pod's.
 
 Egress is the pod's network tx bytes. Each benchmark pod only sends to Datadog,
 but its tx also carries TCP ACKs for the OTLP it receives from the tee. That is
@@ -22,11 +28,13 @@ import sys
 ACK_RATIO = 66 / (2 * 1448)
 ITEMS = {"traces": "spans", "metrics": "metric_points", "logs": "log_records"}
 BASELINE = "contrib"
-ARM_ORDER = ["contrib", "contribotlp", "contribotlpeq", "ddot", "ddotv2", "ddotdefault"]
+# The OTLP arms move work (format conversion, APM stats) from the collector to
+# the intake, so they are a reference, listed last.
+ARM_ORDER = ["contrib", "ddot", "ddotv2", "ddotdefault", "contribotlpeq", "contribotlp"]
 ARM_LABEL = {
     "contrib": "contrib 0.159.0 + datadog exporter",
-    "contribotlp": "contrib 0.159.0 + otlp_http (zstd, docs batching)",
-    "contribotlpeq": "contrib 0.159.0 + otlp_http (zstd, equal batching)",
+    "contribotlp": "reference: contrib + otlp_http (docs batching)",
+    "contribotlpeq": "reference: contrib + otlp_http (equal batching)",
     "ddot": "DDOT 7.84.3 standalone (converter off)",
     "ddotv2": "DDOT, v2 + zlib/gzip forced (converter off)",
     "ddotdefault": "DDOT 7.84.3 standalone (image defaults)",
@@ -37,6 +45,10 @@ def load(run, phase):
     return json.loads((run / f"{phase}.json").read_text())
 
 
+def tee_sent(snap, arm, sig):
+    return snap.get("tee", {}).get(f"otlp_grpc/bench-{arm}-{sig} sent_{ITEMS[sig]}", 0.0)
+
+
 def counter(p, name):
     t = p["telemetry"]
     return t.get(f"otelcol_{name}", 0.0) if "error" not in t else None
@@ -45,13 +57,16 @@ def counter(p, name):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("run", type=pathlib.Path)
+    ap.add_argument("--from", dest="frm", default="start")
+    ap.add_argument("--to", default="end")
     ap.add_argument("--usd-per-gb", type=float, default=None,
                     help="internet egress list price to convert bytes to dollars; cite its source")
     a = ap.parse_args()
-    start, end = load(a.run, "start"), load(a.run, "end")
+    start, end = load(a.run, a.frm), load(a.run, a.to)
     secs = end["taken"] - start["taken"]
+    name_out = "report.md" if (a.frm, a.to) == ("start", "end") else f"report-{a.frm}-{a.to}.md"
 
-    rows, warnings = {}, []
+    rows, idle, warnings = {}, {}, []
     for name, e in end["pods"].items():
         s = start["pods"].get(name)
         if not s or s["uid"] != e["uid"] or s["restarts"] != e["restarts"]:
@@ -59,14 +74,20 @@ def main():
             continue
         sig = e["signal"]
         item = ITEMS[sig]
+        if e.get("idle"):
+            idle[(e["arm"], sig)] = e["tx_bytes"] - s["tx_bytes"]
+            continue
         recv = (counter(e, f"receiver_accepted_{item}") or 0) - (counter(s, f"receiver_accepted_{item}") or 0)
+        sent = tee_sent(end, e["arm"], sig) - tee_sent(start, e["arm"], sig)
+        if sent and abs(recv / sent - 1) > 0.01:
+            warnings.append(f"{name}: receivers accepted {recv:,.0f} {item}, the tee sent {sent:,.0f}")
         failed = (counter(e, f"exporter_send_failed_{item}") or 0) - (counter(s, f"exporter_send_failed_{item}") or 0)
         refused = (counter(e, f"receiver_refused_{item}") or 0) - (counter(s, f"receiver_refused_{item}") or 0)
         rx = e["rx_bytes"] - s["rx_bytes"]
         tx = e["tx_bytes"] - s["tx_bytes"]
         ack = rx * ACK_RATIO
         rows[(e["arm"], sig)] = {
-            "tx": tx, "rx": rx, "ack": ack, "net": tx - ack, "items": recv, "failed": failed, "refused": refused,
+            "tx": tx, "rx": rx, "ack": ack, "net": tx - ack, "items": sent or recv, "failed": failed, "refused": refused,
             "cores": (e["cpu_core_ns"] - s["cpu_core_ns"]) / 1e9 / secs,
             "mem": e["mem_working_set"],
         }
@@ -123,11 +144,22 @@ def main():
         usd = f"${gb_day * 30 * a.usd_per_gb:,.2f}" if a.usd_per_gb else "pass --usd-per-gb"
         w(f"| {ARM_LABEL[arm]} | {gb_day:,.2f} | {vs} | {cores:.3f} | {usd} |")
     w("")
+    if idle:
+        w("## Fixed egress (idle twins)\n")
+        w("| Arm | Traces MB/h | Metrics MB/h | Logs MB/h | Share of loaded egress |")
+        w("|---|---:|---:|---:|---:|")
+        for arm in ARM_ORDER:
+            if not any(k[0] == arm for k in idle):
+                continue
+            mbh = [idle.get((arm, sig), float("nan")) / 1e6 / secs * 3600 for sig in ITEMS]
+            share = sum(idle.get((arm, sig), 0) for sig in ITEMS) / totals[arm][0] if arm in totals else float("nan")
+            w(f"| {ARM_LABEL[arm]} | " + " | ".join(f"{x:.2f}" for x in mbh) + f" | {share*100:.2f}% |")
+        w("")
     w("Egress is pod tx bytes minus the estimated ACKs for inbound OTLP. "
       "Raw snapshots: start.json, end.json.")
 
     text = "\n".join(out)
-    (a.run / "report.md").write_text(text + "\n")
+    (a.run / name_out).write_text(text + "\n")
     print(text)
 
 

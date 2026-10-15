@@ -141,21 +141,25 @@ arm_env() {
   return 0
 }
 
+# render_arm <arm> <signal> [idle]. An idle twin runs the same image and config on
+# the same node with no input (the tee does not know it), so its egress is the
+# arm's fixed traffic outside the measured pipeline: metadata, self-telemetry.
 render_arm() {
-  local arm="$1" signal="$2" name="bench-$1-$2"
+  local arm="$1" signal="$2" app=bench name="bench-$1-$2"
+  if [ "${3:-}" = idle ]; then app=bench-idle; name="bench-idle-$1-$2"; fi
   cat <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: $name
-  labels: {app: bench, bench-arm: $arm, bench-signal: $signal}
+  labels: {app: $app, bench-arm: $arm, bench-signal: $signal}
 spec:
   replicas: 1
   selector:
-    matchLabels: {app: bench, bench-arm: $arm, bench-signal: $signal}
+    matchLabels: {app: $app, bench-arm: $arm, bench-signal: $signal}
   template:
     metadata:
-      labels: {app: bench, bench-arm: $arm, bench-signal: $signal}
+      labels: {app: $app, bench-arm: $arm, bench-signal: $signal}
       annotations:
         bench/config-hash: "$(shasum <"$BENCH/$(arm_conf "$arm" "$signal")" | cut -c1-12)"
     spec:
@@ -170,7 +174,7 @@ spec:
             - {name: otlp-grpc, containerPort: 4317}
             - {name: telemetry, containerPort: 8888}
           env:
-            - {name: BENCH_ENV, value: bench-$arm}
+            - {name: BENCH_ENV, value: bench-$arm$([ $app = bench ] || echo -idle)}
             - {name: BENCH_HOST_SUFFIX, value: "$(arm_suffix "$arm")"}
             - name: DD_API_KEY
               valueFrom: {secretKeyRef: {name: datadog-secret, key: api-key}}
@@ -186,6 +190,9 @@ $(arm_env "$arm")
         - name: config
           configMap: {name: bench-config}
 ---
+EOF
+  [ $app = bench ] || return 0
+  cat <<EOF
 apiVersion: v1
 kind: Service
 metadata:
@@ -203,6 +210,7 @@ log "Applying the benchmark collectors (${ARMS[*]} x traces, metrics, logs)"
 for arm in "${ARMS[@]}"; do
   for signal in traces metrics logs; do
     render_arm "$arm" "$signal"
+    render_arm "$arm" "$signal" idle
   done
 done | kubectl -n "$NAMESPACE" apply -f - >/dev/null
 
@@ -215,7 +223,7 @@ if [ "$PROFILER" = 1 ]; then
     --values "$BENCH/profiler-values.yml" --set "datadog.site=$DD_SITE" >/dev/null
 fi
 
-kubectl -n "$NAMESPACE" rollout status deploy -l app=bench --timeout=300s >/dev/null \
+kubectl -n "$NAMESPACE" rollout status deploy -l 'app in (bench,bench-idle)' --timeout=300s >/dev/null \
   || warn "some benchmark collectors are not ready: kubectl -n $NAMESPACE get pods -l app=bench"
 
 cat <<EOF
