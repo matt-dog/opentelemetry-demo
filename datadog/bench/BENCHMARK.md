@@ -153,6 +153,9 @@ v3 only changes metrics.
 - Run 1 done (docs-default batching, tag `run1-docs-defaults`), closed early at
   37 minutes to start run 2. Run 2 adds `contribotlpeq`, equal batching,
   `deltatorate` on the OTLP arms and per-arm host suffixes.
+- Run 2 closed early at 19 minutes (preliminary results below). GKE cluster
+  deleted 2026-10-15 to stop cost; `bench/up.sh` rebuilds it. Raw snapshots stay
+  local in `results/`.
 
 ## Results
 
@@ -175,3 +178,35 @@ Read: DDOT's gain is mostly zstd (logs and traces); v3 adds about 6% on
 metrics (-4.7% vs +1.9% with v2 forced). The DDOT v3 metrics pod used ~350 MiB
 vs ~60 to 75 MiB for v2 and contrib. `contribotlp`'s lead is confounded by batch
 size; run 2 tests it.
+
+### Run 2 (preliminary): equal batching, 2026-10-15 13:50 to 14:09 ET (0.31 h)
+
+Every Datadog Exporter arm and `contribotlpeq` batch 8192 items (10s). Bytes per
+item against `contrib`:
+
+| Arm | Traces | Metrics | Logs | All signals, GB/day | CPU cores |
+|---|---:|---:|---:|---:|---:|
+| contrib | 280 B/span | 25.3 B/point | 182 B/record | 18.22 | 0.129 |
+| ddot | -26.6% | -58.9% | -17.8% | 12.87 (-29.4%) | 0.147 |
+| ddotv2 | -26.5% | +4.1% | +3.3% | 14.80 (-18.8%) | 0.144 |
+| ddotdefault | -26.2% | -59.3% | -17.1% | 12.91 (-29.2%) | 0.136 |
+| contribotlpeq (equal batching) | -79.6% | -33.7% | -52.0% | 5.49 (-69.9%) | 0.062 |
+| contribotlp (docs batching) | -73.1% | +0.8% | -12.3% | 8.20 (-55.0%) | 0.072 |
+
+Read, preliminary (one 19-minute window, one workload):
+- With realistic batches, v3 + zstd cut DDOT's metrics bytes by ~59% against
+  contrib; forcing v2 + zlib removes it. On metrics DDOT is smaller than the
+  OTLP path (10.4 vs 16.8 B/point).
+- The OTLP path is smaller overall (-70% vs DDOT's -29%), mostly on traces and
+  logs. It sends no APM stats payloads (Datadog computes them on intake), and
+  the Datadog trace format repeats resource tags per span.
+- The docs' OTLP byte batching (2 to 4 MB) did worse than 8192-item batches
+  here; at this volume it likely flushes on its timeout before filling
+  (unverified).
+- Supported claim: DDOT exports ~30% fewer bytes than contrib with the Datadog
+  Exporter on this workload. Not supported: fewer bytes than the upstream
+  Collector in general; contrib with `otlp_http` exported fewer.
+- CPU is low for every arm at this load (0.06 to 0.15 cores per arm).
+
+Next if resumed: a full 2-hour run 2, run 3 at 400 users, dollar figures at a
+cited egress price, and a check of the OTLP batching flush behavior.
