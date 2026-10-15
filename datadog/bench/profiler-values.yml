@@ -1,0 +1,51 @@
+# Datadog Agent on the benchmark nodes only, for the Full Host Profiler: eBPF
+# CPU profiles of every process on the node, so each arm's collectors get flame
+# graphs side by side. See BENCHMARK.md.
+#
+#   https://github.com/DataDog/helm-charts/tree/main/charts/datadog (datadog.hostProfiler)
+#
+# The profiler runs beside the core Agent in the Agent pod, so the Agent stays on
+# with everything else turned off. Its own traffic leaves from the Agent pod and
+# does not touch the benchmark pods' counters. Its CPU overhead lands on every arm
+# alike. bench/up.sh sets datadog.site from .env.
+datadog:
+  apiKeyExistingSecret: datadog-secret   # key: api-key, created by up.sh
+  clusterName: otel-demo-gke
+  tags:
+    - env:bench-profiler
+  hostProfiler:
+    enabled: true
+    # Pinned preview build; the chart default is a moving nightly.
+    image: datadog/ddot-ebpf:7.81.0-preview-host-profiler-1.0
+  logs:
+    enabled: false
+  apm:
+    portEnabled: false
+    socketEnabled: false
+  processAgent:
+    enabled: false
+  kubeStateMetricsCore:
+    enabled: false
+  orchestratorExplorer:
+    enabled: false
+  otelCollector:
+    enabled: false
+  operator:
+    enabled: false
+
+clusterAgent:
+  enabled: false
+
+# GKE nodes run Container-Optimized OS, where /usr/src is read-only and
+# system-probe cannot start without this.
+providers:
+  gke:
+    cos: true
+
+agents:
+  nodeSelector:
+    bench: "true"
+  tolerations:
+    - key: bench
+      operator: Exists
+      effect: NoSchedule

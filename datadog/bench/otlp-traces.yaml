@@ -1,0 +1,110 @@
+# Benchmark collector, traces, OTLP path (contribotlp arm). See BENCHMARK.md.
+#
+# The docs' self-managed setup without the Datadog Exporter: otlp_http to
+# Datadog's OTLP intake, and the community span_metrics connector for RED
+# metrics in place of the datadog connector. Exporter and connector settings are
+# copied from my-values-file.yml, which follows:
+#   https://docs.datadoghq.com/opentelemetry/setup/collector_exporter/
+# Span metrics leave this pod as metrics, so they count as trace egress, the way
+# APM stats do in the Datadog Exporter arms.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 64
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resource/bench:
+    attributes:
+    - key: deployment.environment.name
+      value: ${env:BENCH_ENV}
+      action: upsert
+exporters:
+  otlp_http/datadog:
+    endpoint: https://otlp.${env:DD_SITE}
+    headers:
+      dd-api-key: ${env:DD_API_KEY}
+      dd-otel-metric-config: '{ "resource_attributes_as_tags": true, "instrumentation_scope_metadata_as_tags":
+        true }'
+    compression: zstd
+    compression_params:
+      level: 3
+    sending_queue:
+      batch:
+        sizer: bytes
+        min_size: 2097152
+        max_size: 4194304
+service:
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+      - pull:
+          exporter:
+            prometheus:
+              host: 0.0.0.0
+              port: 8888
+  pipelines:
+    traces:
+      receivers:
+      - otlp
+      processors:
+      - memory_limiter
+      - resource/bench
+      exporters:
+      - span_metrics/datadog
+      - otlp_http/datadog
+    metrics/span_metrics:
+      receivers:
+      - span_metrics/datadog
+      exporters:
+      - otlp_http/datadog
+connectors:
+  span_metrics/datadog:
+    aggregation_temporality: AGGREGATION_TEMPORALITY_DELTA
+    add_resource_attributes: true
+    histogram:
+      exponential: {}
+      unit: s
+    dimensions:
+    - name: deployment.environment.name
+    - name: service.version
+    - name: http.response.status_code
+    - name: container.id
+    - name: aws.ecs.launchtype
+    - name: aws.ecs.task.arn
+    - name: cloud.provider
+    - name: cloud.account.id
+    - name: host.id
+    - name: host.name
+    - name: k8s.node.name
+    - name: k8s.cluster.name
+    - name: azure.resourcegroup.name
+    - name: aws.s3.bucket
+    - name: db.namespace
+    - name: messaging.destination.name
+    - name: messaging.system
+    - name: server.address
+    - name: operation.name
+    - name: http.request.method
+    - name: http.method
+    - name: db.system
+    - name: messaging.operation
+    - name: rpc.system
+    - name: rpc.service
+    - name: faas.invoked_provider
+    - name: faas.invoked_name
+    - name: faas.trigger
+    - name: graphql.operation.type
+    - name: network.protocol.name
+    - name: resource.name
+    - name: http.route
+    - name: messaging.destination
+    - name: rpc.method
+    - name: graphql.operation.name
+    - name: db.statement
+    - name: db.query.text

@@ -1,0 +1,57 @@
+# Benchmark collector, metrics, OTLP path (contribotlp arm). See BENCHMARK.md.
+#
+# Datadog's OTLP metrics intake accepts delta only, so cumulativetodelta runs
+# here (the Datadog Exporter arms convert internally). Exporter settings are
+# copied from my-values-file.yml.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 64
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resource/bench:
+    attributes:
+    - key: deployment.environment.name
+      value: ${env:BENCH_ENV}
+      action: upsert
+  cumulativetodelta: {}
+exporters:
+  otlp_http/datadog:
+    endpoint: https://otlp.${env:DD_SITE}
+    headers:
+      dd-api-key: ${env:DD_API_KEY}
+      dd-otel-metric-config: '{ "resource_attributes_as_tags": true, "instrumentation_scope_metadata_as_tags":
+        true }'
+    compression: zstd
+    compression_params:
+      level: 3
+    sending_queue:
+      batch:
+        sizer: bytes
+        min_size: 2097152
+        max_size: 4194304
+service:
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+      - pull:
+          exporter:
+            prometheus:
+              host: 0.0.0.0
+              port: 8888
+  pipelines:
+    metrics:
+      receivers:
+      - otlp
+      processors:
+      - memory_limiter
+      - resource/bench
+      - cumulativetodelta
+      exporters:
+      - otlp_http/datadog

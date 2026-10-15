@@ -54,9 +54,13 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update open-telemetry prometheus-community >/dev/null
 
 log "Installing the OTel Demo (chart $DEMO_CHART_VERSION)"
+# EXTRA_VALUES: comma-separated values files layered on top (bench/up.sh uses it).
+extra=()
+IFS=, read -r -a files <<<"${EXTRA_VALUES:-}"
+for f in "${files[@]}"; do [ -n "$f" ] && extra+=(--values "$f"); done
 helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
   --version "$DEMO_CHART_VERSION" --namespace "$NAMESPACE" \
-  --values "$DIR/my-values-file.yml" >/dev/null
+  --values "$DIR/my-values-file.yml" ${extra[@]+"${extra[@]}"} >/dev/null
 
 # kube-state-metrics feeds the Kubernetes dashboards through the cluster collector.
 log "Installing kube-state-metrics (chart $KSM_CHART_VERSION)"

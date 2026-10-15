@@ -22,6 +22,12 @@ case "${1:-}" in
     log "Deleted."
     ;;
   "")
+    # The benchmark's node pool (bench/up.sh) bills on its own; sleep it too.
+    if gcloud container node-pools describe "$BENCH_POOL" --cluster "$CLUSTER" \
+         --project "$GCP_PROJECT" --zone "$GKE_ZONE" >/dev/null 2>&1; then
+      log "Sleeping $BENCH_POOL: scaling to 0 nodes"
+      gc resize "$CLUSTER" --node-pool "$BENCH_POOL" --num-nodes 0 --quiet
+    fi
     if [ "$(current_nodes)" = "0" ]; then
       log "$CLUSTER is already asleep"
     else

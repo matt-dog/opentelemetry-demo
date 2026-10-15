@@ -1,0 +1,45 @@
+# Benchmark collector, logs. The same file runs in every arm (DDOT and contrib);
+# only the image and BENCH_ENV differ. See BENCHMARK.md.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 64
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resource/bench:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:BENCH_ENV}
+        action: upsert
+  batch:
+    send_batch_max_size: 100
+    send_batch_size: 10
+    timeout: 10s
+
+exporters:
+  datadog/exporter:
+    api:
+      site: ${env:DD_SITE}
+      key: ${env:DD_API_KEY}
+
+service:
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/bench, batch]
+      exporters: [datadog/exporter]

@@ -1,0 +1,58 @@
+# Benchmark collector, traces. The same file runs in every arm (DDOT and contrib);
+# only the image and BENCH_ENV differ. See BENCHMARK.md.
+#
+# Pipeline shape and batch settings are the Datadog Exporter setup from the docs:
+#   https://docs.datadoghq.com/opentelemetry/setup/collector_exporter/
+# The datadog connector computes APM stats. Its output goes to the exporter, which
+# sends it to the trace stats intake, so stats bytes count as trace egress.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+        max_recv_msg_size_mib: 64
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  # One env per arm, so Datadog keeps the arms apart.
+  resource/bench:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:BENCH_ENV}
+        action: upsert
+  batch:
+    send_batch_max_size: 100
+    send_batch_size: 10
+    timeout: 10s
+
+connectors:
+  datadog/connector: {}
+
+exporters:
+  datadog/exporter:
+    api:
+      site: ${env:DD_SITE}
+      key: ${env:DD_API_KEY}
+
+service:
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource/bench, batch]
+      exporters: [datadog/connector, datadog/exporter]
+    metrics/apm_stats:
+      receivers: [datadog/connector]
+      processors: [batch]
+      exporters: [datadog/exporter]

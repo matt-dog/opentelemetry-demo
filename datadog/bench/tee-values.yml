@@ -1,0 +1,96 @@
+# Overlay on my-values-file.yml for the DDOT vs contrib benchmark. bench/up.sh
+# passes it as a second --values file. See BENCHMARK.md.
+#
+# The demo collector becomes a tee. App traces, metrics and logs that went to
+# Datadog over otlp_http now go, unchanged, to every benchmark collector instead,
+# one per arm and signal. Each arm then exports to Datadog on its own, so every arm
+# sees the same input. cAdvisor metrics, the cluster collector, Jaeger, Prometheus
+# and OpenSearch stay as they were.
+#
+# Arrays replace on merge, so every list here is complete.
+
+opentelemetry-collector:
+  # Runs on the benchmark nodes too, so kubeletstats reports the benchmark pods'
+  # CPU, memory and network to Datadog.
+  tolerations:
+    - key: bench
+      operator: Exists
+      effect: NoSchedule
+  config:
+    exporters:
+      otlp_grpc/bench-contrib-traces: &bench
+        endpoint: bench-contrib-traces:4317
+        tls:
+          insecure: true
+        compression: gzip
+      otlp_grpc/bench-contrib-metrics: {<<: *bench, endpoint: bench-contrib-metrics:4317}
+      otlp_grpc/bench-contrib-logs: {<<: *bench, endpoint: bench-contrib-logs:4317}
+      otlp_grpc/bench-ddot-traces: {<<: *bench, endpoint: bench-ddot-traces:4317}
+      otlp_grpc/bench-ddot-metrics: {<<: *bench, endpoint: bench-ddot-metrics:4317}
+      otlp_grpc/bench-ddot-logs: {<<: *bench, endpoint: bench-ddot-logs:4317}
+      otlp_grpc/bench-ddotv2-traces: {<<: *bench, endpoint: bench-ddotv2-traces:4317}
+      otlp_grpc/bench-ddotv2-metrics: {<<: *bench, endpoint: bench-ddotv2-metrics:4317}
+      otlp_grpc/bench-ddotv2-logs: {<<: *bench, endpoint: bench-ddotv2-logs:4317}
+      otlp_grpc/bench-ddotdefault-traces: {<<: *bench, endpoint: bench-ddotdefault-traces:4317}
+      otlp_grpc/bench-ddotdefault-metrics: {<<: *bench, endpoint: bench-ddotdefault-metrics:4317}
+      otlp_grpc/bench-ddotdefault-logs: {<<: *bench, endpoint: bench-ddotdefault-logs:4317}
+      otlp_grpc/bench-contribotlp-traces: {<<: *bench, endpoint: bench-contribotlp-traces:4317}
+      otlp_grpc/bench-contribotlp-metrics: {<<: *bench, endpoint: bench-contribotlp-metrics:4317}
+      otlp_grpc/bench-contribotlp-logs: {<<: *bench, endpoint: bench-contribotlp-logs:4317}
+
+      # The arms compute APM stats with the datadog connector, so the demo's own
+      # span_metrics/datadog output is discarded. (The chart cannot drop the
+      # pipeline: a null pipeline breaks its template.)
+      nop: {}
+
+    service:
+      # The chart's OTLP reader, kept, plus a pull reader on :8888 so measure.py
+      # can read the tee's per-exporter send failures (drops to one arm would
+      # shrink that arm's input). Arrays replace on merge.
+      telemetry:
+        metrics:
+          readers:
+            - periodic:
+                exporter:
+                  otlp:
+                    endpoint: http://otel-collector:4318
+                    insecure: true
+                    protocol: http/protobuf
+                interval: 10000
+                timeout: 5000
+            - pull:
+                exporter:
+                  prometheus:
+                    host: 0.0.0.0
+                    port: 8888
+      pipelines:
+        traces/datadog:
+          receivers: [forward/traces_sample]
+          exporters:
+            - otlp_grpc/bench-contrib-traces
+            - otlp_grpc/bench-ddot-traces
+            - otlp_grpc/bench-ddotv2-traces
+            - otlp_grpc/bench-ddotdefault-traces
+            - otlp_grpc/bench-contribotlp-traces
+        # Cumulative, as the apps emit it. The Datadog exporter converts it itself.
+        metrics/datadog:
+          receivers: [forward/metrics_datadog]
+          processors: []
+          exporters:
+            - otlp_grpc/bench-contrib-metrics
+            - otlp_grpc/bench-ddot-metrics
+            - otlp_grpc/bench-ddotv2-metrics
+            - otlp_grpc/bench-ddotdefault-metrics
+            - otlp_grpc/bench-contribotlp-metrics
+        metrics/span_metrics_datadog:
+          receivers: [span_metrics/datadog]
+          exporters: [nop]
+        logs:
+          exporters:
+            - opensearch
+            - debug
+            - otlp_grpc/bench-contrib-logs
+            - otlp_grpc/bench-ddot-logs
+            - otlp_grpc/bench-ddotv2-logs
+            - otlp_grpc/bench-ddotdefault-logs
+            - otlp_grpc/bench-contribotlp-logs
