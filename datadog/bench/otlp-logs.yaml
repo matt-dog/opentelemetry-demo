@@ -1,5 +1,6 @@
-# Benchmark collector, logs, OTLP path (contribotlp arm). See BENCHMARK.md.
-# Exporter settings are copied from my-values-file.yml.
+# Benchmark collector, logs, OTLP path (ddototlp arm). See BENCHMARK.md.
+# Same receiver, processors and batching as logs.yaml; the exporter is otlp_http
+# to Datadog's OTLP intake, zstd level 3.
 receivers:
   otlp:
     protocols:
@@ -25,6 +26,10 @@ processors:
       - set(resource.attributes["datadog.host.name"], resource.attributes["host.name"]) where resource.attributes["host.name"] != nil
     metric_statements: *id001
     log_statements: *id001
+  batch:
+    send_batch_size: 8192
+    send_batch_max_size: 8192
+    timeout: 10s
 exporters:
   otlp_http/datadog:
     endpoint: https://otlp.${env:DD_SITE}
@@ -34,11 +39,6 @@ exporters:
     compression: zstd
     compression_params:
       level: 3
-    sending_queue:
-      batch:
-        sizer: bytes
-        min_size: 2097152
-        max_size: 4194304
 service:
   telemetry:
     metrics:
@@ -57,5 +57,6 @@ service:
       - memory_limiter
       - resource/bench
       - transform/bench_host
+      - batch
       exporters:
       - otlp_http/datadog

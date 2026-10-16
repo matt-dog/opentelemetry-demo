@@ -1,8 +1,6 @@
-# Benchmark collector, metrics, OTLP path (contribotlp arm). See BENCHMARK.md.
-#
-# Datadog's OTLP metrics intake accepts delta only, so cumulativetodelta runs
-# here, then deltatorate on the metrics the original demo converted to rates (the Datadog Exporter arms convert internally). Exporter settings are
-# copied from my-values-file.yml.
+# Benchmark collector, metrics, OTLP path (ddototlp arm). See BENCHMARK.md.
+# Same receiver, processors and batching as metrics.yaml; the exporter is otlp_http
+# to Datadog's OTLP intake, zstd level 3.
 receivers:
   otlp:
     protocols:
@@ -19,6 +17,7 @@ processors:
     - key: deployment.environment.name
       value: ${env:BENCH_ENV}
       action: upsert
+  # The Datadog Exporter converts cumulative sums itself; the OTLP path does it here.
   cumulativetodelta: {}
   transform/bench_host:
     error_mode: ignore
@@ -29,26 +28,10 @@ processors:
       - set(resource.attributes["datadog.host.name"], resource.attributes["host.name"]) where resource.attributes["host.name"] != nil
     metric_statements: *id001
     log_statements: *id001
-  deltatorate:
-    metrics:
-    - k8s.pod.network.io
-    - k8s.pod.network.errors
-    - postgresql.tup_returned
-    - postgresql.tup_fetched
-    - postgresql.tup_inserted
-    - postgresql.tup_updated
-    - postgresql.tup_deleted
-    - postgresql.operations
-    - postgresql.commits
-    - postgresql.rollbacks
-    - postgresql.blks_hit
-    - postgresql.blks_read
-    - postgresql.temp_files
-    - postgresql.temp.io
-    - postgresql.function.calls
-    - postgresql.index.scans
-    - postgresql.sequential_scans
-    - postgresql.blocks_read
+  batch:
+    send_batch_size: 8192
+    send_batch_max_size: 8192
+    timeout: 10s
 exporters:
   otlp_http/datadog:
     endpoint: https://otlp.${env:DD_SITE}
@@ -58,11 +41,6 @@ exporters:
     compression: zstd
     compression_params:
       level: 3
-    sending_queue:
-      batch:
-        sizer: bytes
-        min_size: 2097152
-        max_size: 4194304
 service:
   telemetry:
     metrics:
@@ -82,6 +60,6 @@ service:
       - resource/bench
       - transform/bench_host
       - cumulativetodelta
-      - deltatorate
+      - batch
       exporters:
       - otlp_http/datadog

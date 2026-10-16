@@ -26,14 +26,14 @@ retry() {
 # Logs compression on the DDOT arms was never checked at runtime. Debug logging
 # restarts the pods, so do it first and let the warmup absorb it.
 verify() {
-  for arm in ddot ddotv2 ddotdefault; do
+  for arm in ddot ddotv2; do
     for sig in metrics logs; do
       kubectl -n "$NS" set env "deploy/bench-$arm-$sig" DD_LOG_LEVEL=debug >/dev/null
     done
   done
   kubectl -n "$NS" rollout status deploy -l app=bench --timeout=300s >/dev/null
   sleep 240
-  for arm in ddot ddotv2 ddotdefault; do
+  for arm in ddot ddotv2; do
     for sig in metrics logs; do
       kubectl -n "$NS" logs "deploy/bench-$arm-$sig" --tail=-1 \
         | grep -iE 'compress|zstd|gzip|zlib|v3/series|v2/series|infraattributes|prometheus' \

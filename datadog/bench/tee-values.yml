@@ -18,28 +18,19 @@ opentelemetry-collector:
       effect: NoSchedule
   config:
     exporters:
-      otlp_grpc/bench-contrib-traces: &bench
-        endpoint: bench-contrib-traces:4317
+      otlp_grpc/bench-ddot-traces: &bench
+        endpoint: bench-ddot-traces:4317
         tls:
           insecure: true
         compression: gzip
-      otlp_grpc/bench-contrib-metrics: {<<: *bench, endpoint: bench-contrib-metrics:4317}
-      otlp_grpc/bench-contrib-logs: {<<: *bench, endpoint: bench-contrib-logs:4317}
-      otlp_grpc/bench-ddot-traces: {<<: *bench, endpoint: bench-ddot-traces:4317}
       otlp_grpc/bench-ddot-metrics: {<<: *bench, endpoint: bench-ddot-metrics:4317}
       otlp_grpc/bench-ddot-logs: {<<: *bench, endpoint: bench-ddot-logs:4317}
       otlp_grpc/bench-ddotv2-traces: {<<: *bench, endpoint: bench-ddotv2-traces:4317}
       otlp_grpc/bench-ddotv2-metrics: {<<: *bench, endpoint: bench-ddotv2-metrics:4317}
       otlp_grpc/bench-ddotv2-logs: {<<: *bench, endpoint: bench-ddotv2-logs:4317}
-      otlp_grpc/bench-ddotdefault-traces: {<<: *bench, endpoint: bench-ddotdefault-traces:4317}
-      otlp_grpc/bench-ddotdefault-metrics: {<<: *bench, endpoint: bench-ddotdefault-metrics:4317}
-      otlp_grpc/bench-ddotdefault-logs: {<<: *bench, endpoint: bench-ddotdefault-logs:4317}
-      otlp_grpc/bench-contribotlp-traces: {<<: *bench, endpoint: bench-contribotlp-traces:4317}
-      otlp_grpc/bench-contribotlp-metrics: {<<: *bench, endpoint: bench-contribotlp-metrics:4317}
-      otlp_grpc/bench-contribotlp-logs: {<<: *bench, endpoint: bench-contribotlp-logs:4317}
-      otlp_grpc/bench-contribotlpeq-traces: {<<: *bench, endpoint: bench-contribotlpeq-traces:4317}
-      otlp_grpc/bench-contribotlpeq-metrics: {<<: *bench, endpoint: bench-contribotlpeq-metrics:4317}
-      otlp_grpc/bench-contribotlpeq-logs: {<<: *bench, endpoint: bench-contribotlpeq-logs:4317}
+      otlp_grpc/bench-ddototlp-traces: {<<: *bench, endpoint: bench-ddototlp-traces:4317}
+      otlp_grpc/bench-ddototlp-metrics: {<<: *bench, endpoint: bench-ddototlp-metrics:4317}
+      otlp_grpc/bench-ddototlp-logs: {<<: *bench, endpoint: bench-ddototlp-logs:4317}
 
       # The arms compute APM stats with the datadog connector, so the demo's own
       # span_metrics/datadog output is discarded. (The chart cannot drop the
@@ -70,23 +61,17 @@ opentelemetry-collector:
         traces/datadog:
           receivers: [forward/traces_sample]
           exporters:
-            - otlp_grpc/bench-contrib-traces
             - otlp_grpc/bench-ddot-traces
             - otlp_grpc/bench-ddotv2-traces
-            - otlp_grpc/bench-ddotdefault-traces
-            - otlp_grpc/bench-contribotlp-traces
-            - otlp_grpc/bench-contribotlpeq-traces
+            - otlp_grpc/bench-ddototlp-traces
         # Cumulative, as the apps emit it. The Datadog exporter converts it itself.
         metrics/datadog:
           receivers: [forward/metrics_datadog]
           processors: []
           exporters:
-            - otlp_grpc/bench-contrib-metrics
             - otlp_grpc/bench-ddot-metrics
             - otlp_grpc/bench-ddotv2-metrics
-            - otlp_grpc/bench-ddotdefault-metrics
-            - otlp_grpc/bench-contribotlp-metrics
-            - otlp_grpc/bench-contribotlpeq-metrics
+            - otlp_grpc/bench-ddototlp-metrics
         metrics/span_metrics_datadog:
           receivers: [span_metrics/datadog]
           exporters: [nop]
@@ -94,9 +79,6 @@ opentelemetry-collector:
           exporters:
             - opensearch
             - debug
-            - otlp_grpc/bench-contrib-logs
             - otlp_grpc/bench-ddot-logs
             - otlp_grpc/bench-ddotv2-logs
-            - otlp_grpc/bench-ddotdefault-logs
-            - otlp_grpc/bench-contribotlp-logs
-            - otlp_grpc/bench-contribotlpeq-logs
+            - otlp_grpc/bench-ddototlp-logs

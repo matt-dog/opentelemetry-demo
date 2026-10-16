@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Bring up the DDOT vs contrib benchmark on the OTel Demo cluster. See BENCHMARK.md.
+# Bring up the DDOT exporter benchmark on the OTel Demo cluster. See BENCHMARK.md.
 #
-#   bench/up.sh                   demo + tee + four arms, LOCUST_USERS=200
+#   bench/up.sh                   demo + tee + three arms, LOCUST_USERS=200
 #   LOCUST_USERS=400 bench/up.sh  rerun with a different shop load (idempotent)
 #
 # Each arm runs three collectors (traces, metrics, logs) on its own node in the
@@ -15,8 +15,7 @@ load_env
 
 LOCUST_USERS="${LOCUST_USERS:-200}"
 BENCH_MACHINE_TYPE="n2-standard-4"   # n2, not e2: steadier CPU for the CPU numbers
-ARMS=(contrib contribotlp ddot ddotv2 ddotdefault contribotlpeq)
-CONTRIB_IMAGE="otel/opentelemetry-collector-contrib:0.159.0"   # the upstream version DDOT 7.84.3 embeds
+ARMS=(ddot ddotv2 ddototlp)
 DDOT_IMAGE="datadog/ddot-collector:7.84.3"
 PROFILER="${PROFILER:-1}"            # 0 skips the Full Host Profiler
 DATADOG_CHART_VERSION="3.255.0"
@@ -90,49 +89,31 @@ done
 kubectl -n "$NAMESPACE" create configmap bench-config \
   --from-file="$BENCH/traces.yaml" --from-file="$BENCH/metrics.yaml" --from-file="$BENCH/logs.yaml" \
   --from-file="$BENCH/otlp-traces.yaml" --from-file="$BENCH/otlp-metrics.yaml" --from-file="$BENCH/otlp-logs.yaml" \
-  --from-file="$BENCH/otlpeq-traces.yaml" --from-file="$BENCH/otlpeq-metrics.yaml" --from-file="$BENCH/otlpeq-logs.yaml" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-# Every arm gets the same config, resources and node shape. Only the image, its
-# args and these env vars differ.
-# contribotlp runs the OTLP path's docs configs (otlp-<signal>.yaml);
-# contribotlpeq the same with equal batching (otlpeq-<signal>.yaml).
+# Every arm runs the same DDOT image with the converter off. ddot and ddotv2 run
+# the same config file per signal; ddototlp swaps the exporter (otlp-<signal>.yaml).
 arm_conf() {
   case "$1" in
-    contribotlp)   echo "otlp-$2.yaml" ;;
-    contribotlpeq) echo "otlpeq-$2.yaml" ;;
-    *)             echo "$2.yaml" ;;
+    ddototlp) echo "otlp-$2.yaml" ;;
+    *)        echo "$2.yaml" ;;
   esac
 }
 # Fixed-length host.name suffix per arm, so the arms' env tags stay apart in
-# Datadog without giving any arm a longer hostname to send.
+# Datadog. Earlier runs used -b1 to -b6; these are new so old host tags don't mix in.
 arm_suffix() {
-  case "$1" in
-    contrib) echo -b1 ;; contribotlp) echo -b2 ;; ddot) echo -b3 ;;
-    ddotv2) echo -b4 ;; ddotdefault) echo -b5 ;; contribotlpeq) echo -b6 ;;
-  esac
+  case "$1" in ddot) echo -b7 ;; ddotv2) echo -b8 ;; ddototlp) echo -b9 ;; esac
 }
-arm_image() { case "$1" in contrib*) echo "$CONTRIB_IMAGE" ;; *) echo "$DDOT_IMAGE" ;; esac; }
-arm_args() {
-  case "$1" in
-    contrib*) echo "[\"--config=/conf/$(arm_conf "$1" "$2")\"]" ;;
-    *)        echo "[\"run\", \"--config\", \"file:/conf/$2.yaml\"]" ;;
-  esac
-}
+arm_image() { echo "$DDOT_IMAGE"; }
+arm_args() { echo "[\"run\", \"--config\", \"file:/conf/$(arm_conf "$1" "$2")\"]"; }
 arm_env() {
   local pad="            "
   # Standalone DDOT asks the core Agent for its hostname and fails without one.
-  # The node name is what contrib detects on its own.
-  case "$1" in ddot*)
-    echo "$pad- {name: DD_HOSTNAME, valueFrom: {fieldRef: {fieldPath: spec.nodeName}}}" ;;
-  esac
-  # ddot and ddotv2 turn off DDOT's converter, which otherwise adds infraattributes,
-  # cumulativetodelta, a self-telemetry scrape and the datadog extension to the
-  # config. ddotdefault keeps the image defaults.
-  case "$1" in ddot|ddotv2)
-    echo "$pad- {name: DD_OTELCOLLECTOR_CONVERTER_FEATURES, value: none}" ;;
-  esac
-  # ddotv2 forces what contrib sends: v2 series with zlib, and gzip logs.
+  echo "$pad- {name: DD_HOSTNAME, valueFrom: {fieldRef: {fieldPath: spec.nodeName}}}"
+  # The converter would add infraattributes, cumulativetodelta, a self-telemetry
+  # scrape and extensions to the config. Off on every arm, so all run what they're given.
+  echo "$pad- {name: DD_OTELCOLLECTOR_CONVERTER_FEATURES, value: none}"
+  # ddotv2 sends what contrib's Datadog Exporter sends: v2 series with zlib, and gzip logs.
   if [ "$1" = ddotv2 ]; then
     echo "$pad- {name: DD_SERIALIZER_COMPRESSOR_KIND, value: zlib}"
     echo "$pad- {name: DD_USE_V3_API_SERIES_ENABLED, value: \"false\"}"

@@ -1,12 +1,7 @@
-# Benchmark collector, traces, OTLP path (contribotlp arm). See BENCHMARK.md.
-#
-# The docs' self-managed setup without the Datadog Exporter: otlp_http to
-# Datadog's OTLP intake, and the community span_metrics connector for RED
-# metrics in place of the datadog connector. Exporter and connector settings are
-# copied from my-values-file.yml, which follows:
-#   https://docs.datadoghq.com/opentelemetry/setup/collector_exporter/
-# Span metrics leave this pod as metrics, so they count as trace egress, the way
-# APM stats do in the Datadog Exporter arms.
+# Benchmark collector, traces, OTLP path (ddototlp arm). See BENCHMARK.md.
+# Same receiver, processors and batching as traces.yaml; the exporter is otlp_http
+# to Datadog's OTLP intake, zstd level 3, and span_metrics stands in for the
+# datadog connector.
 receivers:
   otlp:
     protocols:
@@ -32,6 +27,10 @@ processors:
       - set(resource.attributes["datadog.host.name"], resource.attributes["host.name"]) where resource.attributes["host.name"] != nil
     metric_statements: *id001
     log_statements: *id001
+  batch:
+    send_batch_size: 8192
+    send_batch_max_size: 8192
+    timeout: 10s
 exporters:
   otlp_http/datadog:
     endpoint: https://otlp.${env:DD_SITE}
@@ -41,11 +40,6 @@ exporters:
     compression: zstd
     compression_params:
       level: 3
-    sending_queue:
-      batch:
-        sizer: bytes
-        min_size: 2097152
-        max_size: 4194304
 service:
   telemetry:
     metrics:
@@ -64,6 +58,7 @@ service:
       - memory_limiter
       - resource/bench
       - transform/bench_host
+      - batch
       exporters:
       - span_metrics/datadog
       - otlp_http/datadog
@@ -72,6 +67,8 @@ service:
       - span_metrics/datadog
       exporters:
       - otlp_http/datadog
+      processors:
+      - batch
 connectors:
   span_metrics/datadog:
     aggregation_temporality: AGGREGATION_TEMPORALITY_DELTA

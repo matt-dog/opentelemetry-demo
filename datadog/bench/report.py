@@ -27,10 +27,9 @@ import sys
 
 ACK_RATIO = 66 / (2 * 1448)
 ITEMS = {"traces": "spans", "metrics": "metric_points", "logs": "log_records"}
-BASELINE = "contrib"
-# The OTLP arms move work (format conversion, APM stats) from the collector to
-# the intake, so they are a reference, listed last.
-ARM_ORDER = ["contrib", "ddot", "ddotv2", "ddotdefault", "contribotlpeq", "contribotlp"]
+# Current arms first. The rest are from earlier runs (contrib, contrib + OTLP),
+# kept so their snapshots still report.
+ARM_ORDER = ["ddotv2", "ddot", "ddototlp", "contrib", "ddotdefault", "contribotlpeq", "contribotlp"]
 ARM_LABEL = {
     "contrib": "contrib 0.159.0 + datadog exporter",
     "contribotlp": "reference: contrib + otlp_http (docs batching)",
@@ -38,6 +37,7 @@ ARM_LABEL = {
     "ddot": "DDOT 7.84.3 standalone (converter off)",
     "ddotv2": "DDOT, v2 + zlib/gzip forced (converter off)",
     "ddotdefault": "DDOT 7.84.3 standalone (image defaults)",
+    "ddototlp": "DDOT, otlp_http + zstd 3 (converter off)",
 }
 
 
@@ -63,6 +63,9 @@ def main():
                     help="internet egress list price to convert bytes to dollars; cite its source")
     a = ap.parse_args()
     start, end = load(a.run, a.frm), load(a.run, a.to)
+    global BASELINE
+    # contrib in runs that had it; otherwise ddotv2, which sends what contrib sends.
+    BASELINE = "contrib" if any(p["arm"] == "contrib" for p in end["pods"].values()) else "ddotv2"
     secs = end["taken"] - start["taken"]
     name_out = "report.md" if (a.frm, a.to) == ("start", "end") else f"report-{a.frm}-{a.to}.md"
 
@@ -97,18 +100,18 @@ def main():
             warnings.append(f"{name}: refused {refused:.0f} {item} (memory_limiter)")
 
     # Every arm must get the same input, or bytes per item is the only fair
-    # comparison and totals mislead. Flag gaps over 1% against contrib.
+    # comparison and totals mislead. Flag gaps over 1% against the baseline.
     for (arm, sig), r in rows.items():
         base = rows.get((BASELINE, sig))
         if base and base["items"] and abs(r["items"] / base["items"] - 1) > 0.01:
-            warnings.append(f"bench-{arm}-{sig}: received {r['items']:,.0f} vs contrib's {base['items']:,.0f}")
+            warnings.append(f"bench-{arm}-{sig}: received {r['items']:,.0f} vs the baseline's {base['items']:,.0f}")
     for key, val in end.get("tee", {}).items():
         if "failed" in key and val - start.get("tee", {}).get(key, 0.0) > 0:
             warnings.append(f"tee {key}: {val - start['tee'].get(key, 0.0):,.0f} during the window")
 
     out = []
     w = out.append
-    w(f"# DDOT vs contrib egress: {a.run.name}\n")
+    w(f"# Egress: {a.run.name}\n")
     w(f"Window: {start['taken_iso']} to {end['taken_iso']} ({secs/3600:.2f} h).\n")
     if warnings:
         w("**Warnings**\n")
@@ -117,7 +120,7 @@ def main():
     for sig, item in ITEMS.items():
         base = rows.get((BASELINE, sig))
         w(f"## {sig}\n")
-        w(f"| Arm | Items received | Egress MB | Est. ACK MB | Bytes per {item[:-1].replace('_', ' ')} | Per item vs contrib | CPU cores | Mem MiB |")
+        w(f"| Arm | Items received | Egress MB | Est. ACK MB | Bytes per {item[:-1].replace('_', ' ')} | Per item vs {BASELINE} | CPU cores | Mem MiB |")
         w("|---|---:|---:|---:|---:|---:|---:|---:|")
         for arm in ARM_ORDER:
             r = rows.get((arm, sig))
@@ -131,7 +134,7 @@ def main():
         w("")
 
     w("## All signals\n")
-    w("| Arm | Egress GB/day (projected) | vs contrib | CPU cores | Egress $/month at the given price |")
+    w(f"| Arm | Egress GB/day (projected) | vs {BASELINE} | CPU cores | Egress $/month at the given price |")
     w("|---|---:|---:|---:|---:|")
     totals = {}
     for arm in ARM_ORDER:
