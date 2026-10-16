@@ -39,8 +39,24 @@ components:
     resources:
       limits:
         memory: 4Gi
+  # Overnight at 200 users the chart's limits OOM-looped the database (100Mi),
+  # which took product-catalog (32Mi) down with it, changing the workload.
+  astronomy-db:
+    resources:
+      limits:
+        memory: 512Mi
+  product-catalog:
+    resources:
+      limits:
+        memory: 128Mi
 # The demo's Prometheus OOMs at its 400Mi under the heavier load. It is not on the
 # measured path, but a crash loop adds noise on the default pool.
+# Jaeger keeps traces in memory and OOM-looped at the chart's 600Mi.
+jaeger:
+  jaeger:
+    resources:
+      limits:
+        memory: 1536Mi
 prometheus:
   server:
     resources:

@@ -44,8 +44,12 @@ verify() {
   done
   kubectl -n "$NS" rollout status deploy -l app=bench --timeout=300s >/dev/null
 }
-say "verification: debug logs on DDOT metrics and logs pods"
-verify || say "verification failed; continuing"
+if [ "${SKIP_VERIFY:-0}" = 1 ]; then
+  say "verification skipped"
+else
+  say "verification: debug logs on DDOT metrics and logs pods"
+  verify || say "verification failed; continuing"
+fi
 for d in $(kubectl -n "$NS" get deploy -l app=bench -o name 2>/dev/null); do
   kubectl -n "$NS" set env "$d" DD_LOG_LEVEL- >/dev/null 2>&1 || true
 done
