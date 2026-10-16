@@ -84,9 +84,33 @@ fairly only once Datadog shows the same data from it (Parity, below).
 
 ## Results
 
-### Campaign `c2` (DDOT arms)
+### Campaign `c2` (DDOT arms), 2026-10-16
 
-Pending.
+Two windows, arms on different nodes in each: `r1` 10:38 to 12:09 ET (1.5 h),
+`r2` 12:24 to 16:04 ET (3.7 h). Window 3 did not run (the runner was stopped);
+`r2` was closed by hand with its pods untouched since the rotation. 200 Locust
+users, 8192-item batches. No input warnings.
+
+Bytes per item in `r2`, and change vs `ddotv2`:
+
+| Arm | Traces (B/span) | Metrics (B/point) | Logs (B/record) | All signals (total bytes) |
+|---|---:|---:|---:|---:|
+| `ddotv2` (Datadog Exporter, v2) | 198.8 | 27.0 | 172.6 | 14.7 GB/day |
+| `ddot` (Datadog Exporter, v3) | 198.9 (+0.1%) | 10.5 (-61.0%) | 141.9 (-17.8%) | -10.3% |
+| `ddototlp` (`otlp_http`) | 55.6 (-72.0%) | 17.9 (-33.8%) | 79.3 (-54.1%) | -64.3% |
+
+Every change vs `ddotv2` was within 1 point across all four half-windows (`r1`
+all signals: `ddot` -10.2%, `ddototlp` -64.5%).
+
+- Traces: v2 and v3 are identical; v3 changes metrics only. The OTLP gap on
+  traces is format, since both compress with zstd 3.
+- Metrics: v3 is the smallest of the three.
+- Fixed egress (idle twins): 0.2% or less of each arm's loaded egress.
+- Parity, `r1` first half (10:38 to 11:24): ingested spans and log events per
+  env within 0.7% of what the tee sent, for all three arms. Trace metrics
+  (`trace.http.server.request.hits`, `trace.grpc.server.request.hits`) present
+  for `ddototlp` and within 0.7% of the Datadog Exporter arms. Metric series
+  per env not yet compared.
 
 ### Against contrib (campaign `c1`, 2026-10-15)
 
