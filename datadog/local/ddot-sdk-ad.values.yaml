@@ -1,0 +1,35 @@
+# The DDOT SDK on the ad service, kept out of values-local.yaml until it exports
+# (2026-10-18: it loaded and opened OTLP connections, but no spans reached
+# Datadog; see datadog/CHANGES.md). To try it:
+#   helm upgrade ... --values values-local.yaml --values ddot-sdk-ad.values.yaml
+components:
+  ad:
+    resources:
+      limits:
+        cpu: 300m
+        memory: 300Mi
+    # The DDOT SDK in place of the upstream OpenTelemetry Java agent the image
+    # ships: an init container copies the DDOT agent jar from its public image,
+    # and JAVA_TOOL_OPTIONS points at it (the image's own value names
+    # /usr/src/app/opentelemetry-javaagent.jar). Same OTEL_* settings, same
+    # OTLP endpoint. To swap back, delete this block.
+    initContainers:
+      - name: ddot-sdk
+        image: datadog/dd-otel-autoinstrumentation-java:1.67-preview
+        command: ["cp", "/javaagent.jar", "/ddot/javaagent.jar"]
+        volumeMounts: [{name: ddot-sdk, mountPath: /ddot}]
+    mountedEmptyDirs:
+      - name: ddot-sdk
+        mountPath: /ddot
+    envOverrides:
+      - name: JAVA_TOOL_OPTIONS
+        value: -javaagent:/ddot/javaagent.jar -Xmx200m
+      # OTLP out for every signal (the settings in the DDOT SDK swap slide).
+      - name: OTEL_TRACES_EXPORTER
+        value: otlp
+      - name: DD_TRACE_OTEL_ENABLED
+        value: "true"
+      - name: DD_LOGS_OTEL_ENABLED
+        value: "true"
+      - name: DD_METRICS_OTEL_ENABLED
+        value: "true"

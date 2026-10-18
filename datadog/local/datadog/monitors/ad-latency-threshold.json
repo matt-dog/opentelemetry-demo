@@ -1,0 +1,14 @@
+{
+  "name": "[otel demo] ad service p95 latency above 50 ms (${ENV_NAME})",
+  "type": "query alert",
+  "query": "avg(last_2m):p95:trace.grpc.server.request{env:${ENV_NAME},service:ad} > 0.05",
+  "message": "p95 latency on the ad service is above 50 ms (baseline about 2 ms). The scenarios pod turns adHighCpu on from :30 to :45 each hour, UTC; this monitor stays in alert for the whole window, where the anomaly monitor flags only the onset. No notification targets on purpose.",
+  "tags": ["env:${ENV_NAME}", "service:ad"],
+  "priority": 5,
+  "options": {
+    "thresholds": {"critical": 0.05, "warning": 0.02},
+    "notify_no_data": false,
+    "include_tags": true,
+    "require_full_window": false
+  }
+}

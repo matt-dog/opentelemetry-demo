@@ -25,6 +25,21 @@ into git or undone.
 
 ## Log
 
+### 2026-10-18 · DDOT SDK on ad: tried, not exporting yet, kept opt-in
+- **What:** `local/ddot-sdk-ad.values.yaml` (not applied by `up.sh`): an init container copies the
+  agent jar from `datadog/dd-otel-autoinstrumentation-java:1.67-preview`, `JAVA_TOOL_OPTIONS` points
+  at it in place of the image's upstream OTel agent, plus `OTEL_TRACES_EXPORTER=otlp` and
+  `DD_TRACE_OTEL_ENABLED`, `DD_LOGS_OTEL_ENABLED`, `DD_METRICS_OTEL_ENABLED` (the settings on the DDOT
+  SDK swap slide). Also `local/datadog/monitors/ad-latency-threshold.json`, a p95 > 50 ms monitor
+  that stays in alert for the whole :30 to :45 window (applied with the next `dd-apply.py` run).
+- **Why:** slide 24's before and after. Tried 23:08 to 23:16Z: the tracer 1.67.1 loaded in OTLP
+  mode and held connections to the collector on 4318, but no `ad` spans reached Datadog, so `ad`
+  went back to the upstream agent before the :30 scenario. Next: find why (env is empty without
+  `DD_ENV`; the tracer's telemetry and debugger try `localhost:8126` with no Agent).
+- **Also:** RUM's `traceparent` wins over the shop's OTel browser SDK on API calls (checked with a
+  headless browser: `tracestate: dd=s:1;o:rum`), so RUM actions open their backend traces and the
+  shop's own browser spans become separate traces.
+
 ### 2026-10-18 · RUM with the Datadog Browser SDK; the shopper asks the AI assistant
 - **What:**
   - `local/datadog/rum-application.json`: the RUM application, created by `dd-apply.py`, which
