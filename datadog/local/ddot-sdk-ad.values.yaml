@@ -1,6 +1,7 @@
-# The DDOT SDK on the ad service, kept out of values-local.yaml until it exports
-# (2026-10-18: it loaded and opened OTLP connections, but no spans reached
-# Datadog; see datadog/CHANGES.md). To try it:
+# The DDOT SDK on the ad service, opt-in until its logs carry trace context.
+# Verified 2026-10-18: traces arrive (telemetry.sdk.name datadog, 1.67.1, env and
+# k8s tags correct); its OTLP logs did not arrive, so trace-to-logs (slide 9)
+# breaks. To use it:
 #   helm upgrade ... --values values-local.yaml --values ddot-sdk-ad.values.yaml
 components:
   ad:
