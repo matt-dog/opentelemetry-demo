@@ -16,6 +16,7 @@ DEMO_CHART_VERSION=0.42.1
 DD_SITE="${DD_SITE:-datadoghq.com}"
 DD_API_KEY_REF="${DD_API_KEY_REF:-op://Employee/ddot-lab/DD_API_KEY}"
 DD_APP_KEY_REF="${DD_APP_KEY_REF:-op://Employee/ddot-lab/DD_APP_KEY}"
+ANTHROPIC_API_KEY_REF="${ANTHROPIC_API_KEY_REF:-op://Employee/ddot-lab/ANTHROPIC_API_KEY}"
 KUBE_STACK_DIR="${KUBE_STACK_DIR:-$HOME/code/opentelemetry-examples/guides/kubernetes/configuration/opentelemetry-kube-stack}"
 GCP_PROJECT="${GCP_PROJECT:-dd-dev-otelpmdev}"
 GKE_ZONE="${GKE_ZONE:-us-east1-b}"
@@ -60,6 +61,10 @@ helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm
 helm repo update open-telemetry >/dev/null
 echo "Installing the Astronomy Shop (chart $DEMO_CHART_VERSION)"
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# The shop's AI agent runs on Claude (values-local.yaml); its key, from 1Password.
+kubectl -n "$NS" create secret generic agent-llm \
+  --from-literal=ANTHROPIC_API_KEY="$(op read "$ANTHROPIC_API_KEY_REF")" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
   --version "$DEMO_CHART_VERSION" --namespace "$NS" \
   --values "$HERE/values-local.yaml" >/dev/null

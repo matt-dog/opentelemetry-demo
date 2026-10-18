@@ -25,6 +25,58 @@ components:
       # each user flow shows in Jaeger as several root spans.
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
         value: http://$(OTEL_COLLECTOR_NAME):4317
+  agent:
+    # The shop's AI agent on a real Claude model instead of its recorded
+    # responses, so Agent Observability shows real tokens and cost. llm.py is
+    # replaced with the same ChatLLM class on LangChain's Anthropic client
+    # (provider "anthropic"); the aiSlowResponse flag still applies. The image
+    # lacks langchain-anthropic, so it is installed at start (1.7.2 is the
+    # newest that fits the image's langchain-core 1.6.3). The key comes from the
+    # agent-llm secret that up.sh creates from 1Password.
+    command:
+      - sh
+      - -c
+      - pip install -q --no-cache-dir langchain-anthropic==1.7.2 && exec python run.py
+    envOverrides:
+      - name: LLM_MODEL
+        value: claude-haiku-5-5
+      - name: USE_VCR
+        value: "False"
+      - name: ANTHROPIC_API_KEY
+        valueFrom:
+          secretKeyRef: {name: agent-llm, key: ANTHROPIC_API_KEY}
+    mountedConfigMaps:
+      - name: claude-llm
+        mountPath: /app/src/agents/llm.py
+        subPath: llm.py
+        data:
+          llm.py: |
+            # Replaces the demo's llm.py (datadog/local/values-local.yaml).
+            import asyncio
+            import os
+            import time
+
+            from langchain_anthropic import ChatAnthropic
+            from src.agents.feature_flags import get_int_feature_flag
+
+
+            class ChatLLM(ChatAnthropic):
+                def __init__(self, **kwargs):
+                    kwargs.setdefault("model", os.getenv("LLM_MODEL", "claude-haiku-5-5"))
+                    kwargs.setdefault("max_tokens", int(os.getenv("LLM_MAX_TOKENS", "16000")))
+                    super().__init__(**kwargs)
+
+                def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+                    delay_ms = get_int_feature_flag("aiSlowResponse")
+                    if delay_ms:
+                        time.sleep(delay_ms / 1000)
+                    return super()._generate(messages, stop, run_manager, **kwargs)
+
+                async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+                    delay_ms = get_int_feature_flag("aiSlowResponse")
+                    if delay_ms:
+                        await asyncio.sleep(delay_ms / 1000)
+                    return await super()._agenerate(messages, stop, run_manager, **kwargs)
   ad:
     # A CPU limit, so adHighCpu (scenarios.yaml) throttles the whole JVM and
     # GetAds slows; with no limit its load threads take spare cores and requests
