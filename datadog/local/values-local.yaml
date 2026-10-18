@@ -16,3 +16,33 @@ default:
 # Logs go to Datadog through the DDOT Collector; nothing feeds OpenSearch.
 opensearch:
   enabled: false
+
+components:
+  load-generator:
+    envOverrides:
+      # The chart points the load generator at :4318 (OTLP/HTTP), but its
+      # locustfile exports over gRPC, so its user_* parent spans never arrive and
+      # each user flow shows in Jaeger as several root spans.
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://$(OTEL_COLLECTOR_NAME):4317
+
+# The chart's 600Mi Jaeger holds up to 25,000 traces in memory and gets
+# OOM-killed with checkout traces of 100+ spans, losing every stored trace.
+jaeger:
+  jaeger:
+    extraEnv:
+      - name: MEMORY_MAX_TRACES
+        value: "10000"
+      - name: PROMETHEUS_ADDR
+        value: prometheus:9090
+      - name: OTEL_COLLECTOR_HOST
+        value: otel-collector
+      - name: OTEL_COLLECTOR_PORT_HTTP
+        value: "4318"
+      - name: JAEGER_HOST
+        value: "0.0.0.0"
+      - name: JAEGER_GRPC_PORT
+        value: "4317"
+    resources:
+      limits:
+        memory: 1536Mi

@@ -3,7 +3,7 @@
 For the DDOT launch blog's screenshots: the familiar OpenTelemetry Demo, collected
 by the DDOT Collector that the opentelemetry-examples kube-stack installer runs
 (OTel Operator + kube-stack, ddot flow). The shop keeps its own Jaeger and Grafana;
-Datadog gets everything. Runs on Rancher Desktop.
+Datadog gets everything. Runs on Rancher Desktop or on GKE.
 
 ```
  Astronomy Shop services ──OTLP──> kube-stack DDOT daemon collector
@@ -13,22 +13,48 @@ Datadog gets everything. Runs on Rancher Desktop.
                                        └─> Datadog     (traces, metrics, logs)
 ```
 
+## Changes from upstream
+
+Nothing in the upstream demo's source, images or chart is modified. Everything
+is new files under `datadog/local/` that install the upstream chart (0.42.1)
+and images with overrides:
+
+| What | Upstream default | Here | Why |
+|---|---|---|---|
+| Collector | demo chart's bundled otelcol-contrib | off; kube-stack DDOT daemon collector (Operator-managed, ddot flow) | the point of the demo |
+| Service OTLP target | `otel-collector` | `OTEL_COLLECTOR_NAME` = kube-stack daemon service | route every service to DDOT |
+| Jaeger, Prometheus | fed by the bundled collector | fed by the DDOT collector (`kube-stack-values.yaml`) | shop UI and Grafana keep working |
+| OpenSearch | on | off | logs go to Datadog |
+| load-generator OTLP endpoint | `:4318` | `:4317` | its exporter is gRPC; at :4318 every export failed, its parent spans were lost, and one user flow showed as many root traces |
+| Jaeger memory | 600Mi, 25,000 traces | 1536Mi, 10,000 traces | OOM-killed under checkout traffic, losing every stored trace |
+| Feature flags (set by `up.sh`, live in flagd) | all off | paymentFailure 50%, cartFailure 100%, productCatalogFailure on for OLJCESPC7Z | error traces for the blog; the shipped productCatalogFailure rule returns "off" on both branches |
+| Host Profiler | none | kube-stack `host-profiler` DaemonSet (DDOT preview image), on by default for `up.sh gke` (`DD_HOST_PROFILER_ENABLED`) | profiles for the blog's second screenshot |
+| `shopper` (new pod) | none | headless Chromium placing an order every 20 s | checkout traces that start at the browser click (`frontend-web`) |
+
+Known issues not fixed: the quote service's (PHP) spans start about 154 s
+before their shipping parent in Rancher Desktop, which stretches checkout
+traces to 2.6 minutes; the ad service's failure records no exception type or
+stack.
+
 ## Run it
 
-Needs about 12 GB for the VM (`rdctl set --virtual-machine.memory-in-gb 16
---virtual-machine.number-cpus 6`), `op` signed in, Helm, and
-`~/code/opentelemetry-examples` checked out on a branch with the kube-stack
-installer (`KUBE_STACK_DIR` overrides the path).
+Needs `op` signed in, Helm, and `~/code/opentelemetry-examples` checked out on a
+branch with the kube-stack installer (`KUBE_STACK_DIR` overrides the path).
 
 ```bash
-datadog/local/up-local.sh
-kubectl --context rancher-desktop -n otel-demo port-forward svc/frontend-proxy 8080:8080
+datadog/local/up.sh local   # Rancher Desktop: about 12 GB for the VM
+datadog/local/up.sh gke     # GKE otel-demo-blog in dd-dev-otelpmdev, created if missing
 ```
+
+Then port-forward `svc/frontend-proxy` 8080 (up.sh prints the command):
 
 - Shop: http://localhost:8080, flags at http://localhost:8080/feature
 - Jaeger: http://localhost:8080/jaeger/ui
 - Grafana: http://localhost:8080/grafana
-- Datadog: APM, `env:otel-demo-local`
+- Datadog: APM, `env:otel-demo-local` or `env:otel-demo-gke-blog`
+
+Delete the GKE cluster when done:
+`gcloud container clusters delete otel-demo-blog --project dd-dev-otelpmdev --zone us-east1-b`
 
 ## Files
 
@@ -37,8 +63,9 @@ kubectl --context rancher-desktop -n otel-demo port-forward svc/frontend-proxy 8
   metrics to its Prometheus, and accepts browser OTLP (CORS).
 - `values-local.yaml`: the demo chart with its bundled Collector off and
   `OTEL_COLLECTOR_NAME` pointing every service at the kube-stack collector.
-- `up-local.sh`: runs the installer (with a kubeconfig holding only the local
-  context), then the demo chart.
+- `shopper.yaml`: the headless browser shopper; `up.sh` applies it.
+- `up.sh`: runs the installer and the demo chart against a kubeconfig holding
+  only the target cluster, then sets the failure flags.
 
 ## Notes
 
@@ -53,3 +80,15 @@ kubectl --context rancher-desktop -n otel-demo port-forward svc/frontend-proxy 8
   `DD_HOSTNAME`, and a new config, because the demo's uses five components DDOT
   7.84.3 does not ship (`kafkametrics`, `redaction`, `gen_ai_normalizer`,
   `opensearch`, `opamp`) plus a profiles pipeline.
+- Fixes over the chart defaults, in `values-local.yaml`: the load generator
+  exports over gRPC but the chart points it at :4318, so its parent spans were
+  lost and each user flow showed as several root traces; Jaeger's 600Mi limit
+  OOM-killed it (and lost every trace) under checkout traffic.
+- Failure flags up.sh sets: `paymentFailure` 50% (Node, exception with stack),
+  `cartFailure` 100% (.NET, redis error with stack, inside a successful
+  checkout), `productCatalogFailure` for product OLJCESPC7Z (Go; the shipped
+  rule returned "off" on both branches). `adFailure` is left off: the ad service
+  records no exception type or stack, so Datadog shows "Missing error message".
+- ddstaging logs: app logs fall through to the `main` index, whose "Reduce
+  volume" exclusion drops 99.99%, so they don't link to traces until an index
+  ahead of `main` matches this env.

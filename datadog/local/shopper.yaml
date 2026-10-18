@@ -1,0 +1,72 @@
+# A headless Chromium that shops like a person: home page, a product, Add To
+# Cart, Place Order, every 20 seconds. The shop's own browser instrumentation
+# (frontend-web) starts each trace at the click, so a checkout trace reads
+# browser -> frontend-proxy -> frontend -> checkout -> payment, with no load
+# generator span on top. See README.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shopper
+  namespace: otel-demo
+data:
+  shop.py: |
+    import random, time
+    from playwright.sync_api import sync_playwright
+
+    BASE = "http://frontend-proxy:8080"
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        while True:
+            ctx = browser.new_context()
+            # The shop's browser tracer exports to http://localhost:8080/otlp-http,
+            # the address a person on their laptop uses; send it to the proxy.
+            ctx.route("http://localhost:8080/otlp-http/**", lambda route: route.continue_(
+                url=route.request.url.replace("localhost:8080", "frontend-proxy:8080")))
+            page = ctx.new_page()
+            try:
+                # The shop polls in the background, so "networkidle" never comes;
+                # wait for the elements instead.
+                page.goto(BASE + "/", wait_until="load")
+                cards = page.locator("[data-cy=product-card]")
+                cards.first.wait_for(timeout=30000)
+                cards.nth(random.randrange(cards.count())).click()
+                page.locator("[data-cy=product-add-to-cart]").click(timeout=30000)
+                page.wait_for_url("**/cart", timeout=30000)
+                # A click before React hydrates the form is a plain submit that
+                # just reloads /cart, so wait for the page to settle first.
+                page.wait_for_load_state("load")
+                time.sleep(4)
+                with page.expect_response(lambda r: "/api/checkout" in r.url, timeout=30000) as resp:
+                    page.locator("[data-cy=checkout-place-order]").click()
+                print("checkout status", resp.value.status, flush=True)
+                time.sleep(15)  # let the browser exporter flush the click and fetch spans
+                print("done:", page.url, flush=True)
+            except Exception as e:
+                print("shopper error:", e, flush=True)
+            finally:
+                page.context.close()
+            time.sleep(20)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopper
+  namespace: otel-demo
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: shopper}}
+  template:
+    metadata:
+      labels: {app: shopper}
+    spec:
+      containers:
+        - name: shopper
+          image: mcr.microsoft.com/playwright/python:v1.47.0-jammy
+          command: ["sh", "-c", "pip install -q playwright==1.47.0 && python /app/shop.py"]
+          volumeMounts: [{name: app, mountPath: /app}]
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {memory: 1Gi}
+      volumes:
+        - name: app
+          configMap: {name: shopper}
