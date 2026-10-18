@@ -15,6 +15,7 @@ NS=otel-demo
 DEMO_CHART_VERSION=0.42.1
 DD_SITE="${DD_SITE:-datadoghq.com}"
 DD_API_KEY_REF="${DD_API_KEY_REF:-op://Employee/ddot-lab/DD_API_KEY}"
+DD_APP_KEY_REF="${DD_APP_KEY_REF:-op://Employee/ddot-lab/DD_APP_KEY}"
 KUBE_STACK_DIR="${KUBE_STACK_DIR:-$HOME/code/opentelemetry-examples/guides/kubernetes/configuration/opentelemetry-kube-stack}"
 GCP_PROJECT="${GCP_PROJECT:-dd-dev-otelpmdev}"
 GKE_ZONE="${GKE_ZONE:-us-east1-b}"
@@ -87,6 +88,12 @@ json.dump(d, open(sys.argv[1] + ".new", "w"), indent=2)
 PY
 kubectl -n "$NS" exec -i deploy/flagd -c flagd-ui -- sh -c 'cat > /app/data/demo.flagd.json' <"$flags.new"
 rm -f "$flags" "$flags.new"
+
+# ---- Datadog monitors and log index (datadog/, applied by dd-apply.py) ------------
+# Skips with a warning when the application key is missing or refused.
+DD_API_KEY="$(op read "$DD_API_KEY_REF")" DD_APP_KEY="$(op read "$DD_APP_KEY_REF" 2>/dev/null || true)" \
+  DD_SITE="$DD_SITE" ENV_NAME="$ENV_NAME" python3 "$HERE/dd-apply.py" \
+  || echo "dd-apply.py failed; the demo is up without its monitors and log index" >&2
 
 cat <<MSG
 

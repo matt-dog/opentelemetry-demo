@@ -1,0 +1,15 @@
+{
+  "name": "[otel demo] ad service latency anomaly (${ENV_NAME})",
+  "type": "query alert",
+  "query": "avg(last_15m):anomalies(p95:trace.grpc.server.request{env:${ENV_NAME},service:ad}, 'basic', 3, direction='above', interval=60, alert_window='last_3m', count_default_zero='true') >= 0.8",
+  "message": "p95 latency on the ad service is above its normal range. The scenarios pod turns adHighCpu on from :30 to :45 each hour, UTC. No notification targets on purpose.",
+  "tags": ["env:${ENV_NAME}", "service:ad"],
+  "priority": 5,
+  "options": {
+    "thresholds": {"critical": 0.8, "critical_recovery": 0},
+    "threshold_windows": {"trigger_window": "last_3m", "recovery_window": "last_3m"},
+    "notify_no_data": false,
+    "include_tags": true,
+    "require_full_window": false
+  }
+}

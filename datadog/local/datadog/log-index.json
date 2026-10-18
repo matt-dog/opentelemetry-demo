@@ -1,0 +1,9 @@
+{
+  "name": "${ENV_NAME}",
+  "filter": {
+    "query": "env:${ENV_NAME} service:(ad OR checkout OR cart OR payment OR product-catalog OR frontend OR email OR quote OR shipping OR currency OR recommendation OR accounting OR fraud-detection)"
+  },
+  "num_retention_days": 7,
+  "daily_limit": 1000000,
+  "exclusion_filters": []
+}

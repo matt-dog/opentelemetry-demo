@@ -32,6 +32,7 @@ and images with overrides:
 | `shopper` (new pod) | none | headless Chromium placing an order every 20 s | checkout traces that start at the browser click (`frontend-web`) |
 | `scenarios` (new pod) | flags changed by hand | holds flags to a schedule in `scenarios.yaml`: `adHighCpu` on from :30 to :45 each hour, UTC | a problem at known times with a quiet baseline between, for anomaly monitors and screenshots |
 | ad CPU limit | none | 300m | adHighCpu throttles the JVM, so GetAds slows; with no limit its load threads take spare cores and requests stay at a few ms |
+| Datadog monitors and log index | none | `datadog/` templates applied by `dd-apply.py` (run by `up.sh`): the ad latency anomaly monitor, and a log index for the env ahead of `main` | the setup is rebuilt from git in any env or org; `${ENV_NAME}` is filled in per env |
 
 Known issues not fixed: the quote service's (PHP) spans start about 154 s
 before their shipping parent in Rancher Desktop, which stretches checkout
@@ -67,6 +68,11 @@ Delete the GKE cluster when done:
   `OTEL_COLLECTOR_NAME` pointing every service at the kube-stack collector.
 - `shopper.yaml`: the headless browser shopper; `up.sh` applies it.
 - `scenarios.yaml`: the flag schedule and the pod that keeps it; `up.sh` applies it.
+- `datadog/`: monitor and log index definitions, templated on `${ENV_NAME}`.
+- `dd-apply.py`: creates or updates them (monitors matched by name, tagged
+  `managed_by:otel-demo-local`). Needs `DD_APP_KEY` (`DD_APP_KEY_REF`, default
+  `op://Employee/ddot-lab/DD_APP_KEY`) with monitors and log index read/write
+  permissions; skips with a warning otherwise.
 - `up.sh`: runs the installer and the demo chart against a kubeconfig holding
   only the target cluster, then sets the failure flags.
 
@@ -92,6 +98,6 @@ Delete the GKE cluster when done:
   checkout), `productCatalogFailure` for product OLJCESPC7Z (Go; the shipped
   rule returned "off" on both branches). `adFailure` is left off: the ad service
   records no exception type or stack, so Datadog shows "Missing error message".
-- ddstaging logs: app logs fall through to the `main` index, whose "Reduce
+- ddstaging logs (now handled by `datadog/log-index.json`): app logs fall through to the `main` index, whose "Reduce
   volume" exclusion drops 99.99%, so they don't link to traces until an index
   ahead of `main` matches this env.
