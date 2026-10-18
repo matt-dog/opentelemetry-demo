@@ -25,6 +25,14 @@ into git or undone.
 
 ## Log
 
+### 2026-10-18 · Planned: re:Invent feature tour (`TOUR-PLAN.md`)
+- **What:** the plan for the next changes: clean-ups that show in screenshots, the DDOT SDK on
+  `ad` and `recommendation`, RUM with the Datadog Browser SDK, a real Claude model behind the agent,
+  change events and stage mode, a presenter dashboard and SLO from git, and an optional Agent for the
+  "full value" slides.
+- **Why:** screenshots for the re:Invent deck and a 15-minute tour of Datadog on OpenTelemetry data
+  with DDOT components only. Nothing in it is applied yet; each step gets its own entry when it is.
+
 ### 2026-10-18 · `fc642ea5` · Datadog monitors and log index from git
 - **What:** `local/datadog/` holds a monitor and a log index as templates on
   `${ENV_NAME}`; `local/dd-apply.py` creates or updates them, and `local/up.sh`
