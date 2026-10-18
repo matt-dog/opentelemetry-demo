@@ -25,6 +25,15 @@ components:
       # each user flow shows in Jaeger as several root spans.
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
         value: http://$(OTEL_COLLECTOR_NAME):4317
+  ad:
+    # A CPU limit, so adHighCpu (scenarios.yaml) throttles the whole JVM and
+    # GetAds slows; with no limit its load threads take spare cores and requests
+    # stay at a few ms. Memory is the chart's default, restated because this
+    # block replaces it.
+    resources:
+      limits:
+        cpu: 300m
+        memory: 300Mi
 
 # The chart's 600Mi Jaeger holds up to 25,000 traces in memory and gets
 # OOM-killed with checkout traces of 100+ spans, losing every stored trace.

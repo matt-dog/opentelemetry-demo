@@ -30,6 +30,8 @@ and images with overrides:
 | Feature flags (set by `up.sh`, live in flagd) | all off | paymentFailure 50%, cartFailure 100%, productCatalogFailure on for OLJCESPC7Z | error traces for the blog; the shipped productCatalogFailure rule returns "off" on both branches |
 | Host Profiler | none | kube-stack `host-profiler` DaemonSet (DDOT preview image), on by default for `up.sh gke` (`DD_HOST_PROFILER_ENABLED`) | profiles for the blog's second screenshot |
 | `shopper` (new pod) | none | headless Chromium placing an order every 20 s | checkout traces that start at the browser click (`frontend-web`) |
+| `scenarios` (new pod) | flags changed by hand | holds flags to a schedule in `scenarios.yaml`: `adHighCpu` on from :30 to :45 each hour, UTC | a problem at known times with a quiet baseline between, for anomaly monitors and screenshots |
+| ad CPU limit | none | 300m | adHighCpu throttles the JVM, so GetAds slows; with no limit its load threads take spare cores and requests stay at a few ms |
 
 Known issues not fixed: the quote service's (PHP) spans start about 154 s
 before their shipping parent in Rancher Desktop, which stretches checkout
@@ -64,6 +66,7 @@ Delete the GKE cluster when done:
 - `values-local.yaml`: the demo chart with its bundled Collector off and
   `OTEL_COLLECTOR_NAME` pointing every service at the kube-stack collector.
 - `shopper.yaml`: the headless browser shopper; `up.sh` applies it.
+- `scenarios.yaml`: the flag schedule and the pod that keeps it; `up.sh` applies it.
 - `up.sh`: runs the installer and the demo chart against a kubeconfig holding
   only the target cluster, then sets the failure flags.
 

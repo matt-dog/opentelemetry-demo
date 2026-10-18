@@ -1,0 +1,81 @@
+# Problem scenarios on a clock: a small pod that holds feature flags to a fixed
+# schedule through flagd-ui's API (flagd:4000/api/read and /api/write), so a
+# problem starts and stops at known times with a quiet baseline in between, for
+# anomaly monitors and screenshots. See README.md.
+#
+# Each entry turns one flag to `variant` from minute `minutes[0]` up to (not
+# including) `minutes[1]` of every hour, UTC, and back to "off" otherwise. The
+# pod owns only the flags listed here; a change to one of them in the flagd UI
+# is put back within 30 s. Edit the schedule and `kubectl apply -f` this file,
+# then `kubectl -n otel-demo rollout restart deploy/scenarios`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scenarios
+  namespace: otel-demo
+data:
+  schedule.json: |
+    [
+      {"flag": "adHighCpu", "variant": "on", "minutes": [30, 45]}
+    ]
+  scenarios.py: |
+    import json, os, time, urllib.request
+    from datetime import datetime, timezone
+
+    API = os.environ.get("FLAGD_UI_API", "http://flagd:4000/api")
+    SCHEDULE = json.load(open("/app/schedule.json"))
+
+    def call(path, body=None):
+        data = None if body is None else json.dumps(body).encode()
+        req = urllib.request.Request(API + path, data=data, method="GET" if data is None else "POST",
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.load(r)
+
+    def wanted(entry, minute):
+        start, end = entry["minutes"]
+        return entry["variant"] if start <= minute < end else "off"
+
+    print("schedule:", json.dumps(SCHEDULE), flush=True)
+    while True:
+        try:
+            flags = call("/read")["flags"]
+            minute = datetime.now(timezone.utc).minute
+            changed = []
+            for entry in SCHEDULE:
+                flag = flags[entry["flag"]]
+                want = wanted(entry, minute)
+                if flag["defaultVariant"] != want:
+                    flag["defaultVariant"] = want
+                    changed.append(f"{entry['flag']}={want}")
+            if changed:
+                # flagd-ui replaces the whole flag file with what it is given.
+                call("/write", {"data": {"flags": flags}})
+                print(datetime.now(timezone.utc).isoformat(timespec="seconds"), "set", ", ".join(changed), flush=True)
+        except Exception as e:
+            print("scenarios error:", e, flush=True)
+        time.sleep(30)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scenarios
+  namespace: otel-demo
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: scenarios}}
+  template:
+    metadata:
+      labels: {app: scenarios}
+    spec:
+      containers:
+        - name: scenarios
+          image: python:3.12-slim
+          command: ["python", "-u", "/app/scenarios.py"]
+          volumeMounts: [{name: app, mountPath: /app}]
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 64Mi}
+      volumes:
+        - name: app
+          configMap: {name: scenarios}

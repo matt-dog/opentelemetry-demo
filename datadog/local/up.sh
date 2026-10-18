@@ -64,6 +64,7 @@ helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
   --values "$HERE/values-local.yaml" >/dev/null
 
 kubectl apply -f "$HERE/shopper.yaml" >/dev/null
+kubectl apply -f "$HERE/scenarios.yaml" >/dev/null
 
 echo "Waiting for every pod to be Ready (up to 10 minutes)"
 kubectl -n "$NS" wait --for=condition=Ready pods --all --timeout=600s >/dev/null \
