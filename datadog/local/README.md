@@ -15,6 +15,9 @@ Datadog gets everything. Runs on Rancher Desktop or on GKE.
 
 ## Changes from upstream
 
+The current state is below; `datadog/CHANGES.md` is the dated log of every
+change and why, including changes made by hand outside git.
+
 Nothing in the upstream demo's source, images or chart is modified. Everything
 is new files under `datadog/local/` that install the upstream chart (0.42.1)
 and images with overrides:
