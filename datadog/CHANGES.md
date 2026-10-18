@@ -25,6 +25,20 @@ into git or undone.
 
 ## Log
 
+### 2026-10-18 · `fd008a09` · The shop's AI agent on Claude (Haiku 5.5)
+- **What:** `local/values-local.yaml` replaces the agent's `llm.py` (mounted from a ConfigMap) with the
+  same `ChatLLM` class on LangChain's Anthropic client, model `claude-haiku-5-5`, recorded responses
+  off (`USE_VCR=False`). The pod installs `langchain-anthropic==1.7.2` at start (the newest that fits
+  the image's `langchain-core` 1.6.3). `local/up.sh` creates the `agent-llm` secret from
+  `op://Employee/ddot-lab/ANTHROPIC_API_KEY`. The upstream image is unchanged.
+- **Why:** Agent Observability showed no tokens or cost (`skipped_tokens_missing`) because the
+  recordings carry no usage. With Claude, spans show provider `anthropic`, real tokens and
+  `cost_estimate_status:success`. The native client was chosen over an OpenAI-compatible endpoint so
+  the provider is recorded as Anthropic. The `aiSlowResponse` flag still applies.
+- **Notes:** each call shows as the LangChain step and as the Anthropic SDK's own OTel span
+  (`com.anthropic.sdk.python`). The LLM app name comes out as `load-generator`, the trace's root
+  service; to be set to the shop assistant. Verified 22:47Z.
+
 ### 2026-10-18 · Planned: re:Invent feature tour (`TOUR-PLAN.md`)
 - **What:** the plan for the next changes: clean-ups that show in screenshots, the DDOT SDK on
   `ad` and `recommendation`, RUM with the Datadog Browser SDK, a real Claude model behind the agent,

@@ -35,6 +35,7 @@ and images with overrides:
 | `shopper` (new pod) | none | headless Chromium placing an order every 20 s | checkout traces that start at the browser click (`frontend-web`) |
 | `scenarios` (new pod) | flags changed by hand | holds flags to a schedule in `scenarios.yaml`: `adHighCpu` on from :30 to :45 each hour, UTC | a problem at known times with a quiet baseline between, for anomaly monitors and screenshots |
 | ad CPU limit | none | 300m | adHighCpu throttles the JVM, so GetAds slows; with no limit its load threads take spare cores and requests stay at a few ms |
+| agent LLM | recorded responses for three prompts | Claude Haiku 5.5 through LangChain's Anthropic client (`llm.py` replaced from a ConfigMap) | real tokens and cost in Agent Observability |
 | Datadog monitors and log index | none | `datadog/` templates applied by `dd-apply.py` (run by `up.sh`): the ad latency anomaly monitor, and a log index for the env ahead of `main` | the setup is rebuilt from git in any env or org; `${ENV_NAME}` is filled in per env |
 
 Known issues not fixed: the quote service's (PHP) spans start about 154 s
