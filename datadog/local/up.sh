@@ -61,6 +61,10 @@ helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm
 helm repo update open-telemetry >/dev/null
 echo "Installing the Astronomy Shop (chart $DEMO_CHART_VERSION)"
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# The load generator's locustfile, with shopping prompts for the agent.
+kubectl -n "$NS" create configmap load-generator-locustfile \
+  --from-file=locustfile.py="$HERE/load-generator/locustfile.py" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 # The shop's AI agent runs on Claude (values-local.yaml); its key, from 1Password.
 kubectl -n "$NS" create secret generic agent-llm \
   --from-literal=ANTHROPIC_API_KEY="$(op read "$ANTHROPIC_API_KEY_REF")" \

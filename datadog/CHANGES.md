@@ -25,6 +25,16 @@ into git or undone.
 
 ## Log
 
+### 2026-10-18 · Load generator prompts for the agent on Claude
+- **What:** `local/load-generator/locustfile.py` is the demo image's own `locustfile.py`
+  (3.1.0) mounted over it from the `load-generator-locustfile` ConfigMap (`up.sh` creates it). Two
+  changes, marked `datadog/local` in the file: six shopping questions replace the three prompts the
+  recorded responses covered, and `user_ask_agent` no longer carries `gen_ai.input.messages`.
+- **Why:** with a real model the prompts can be anything, so they now exercise the shop's tools,
+  mostly `get_ads`, which ties the ad service's scenarios to the AI assistant. The attribute made the
+  load generator's span the root of every Agent Observability trace, so the app was named
+  `load-generator`.
+
 ### 2026-10-18 · `fd008a09` · The shop's AI agent on Claude (Haiku 5.5)
 - **What:** `local/values-local.yaml` replaces the agent's `llm.py` (mounted from a ConfigMap) with the
   same `ChatLLM` class on LangChain's Anthropic client, model `claude-haiku-5-5`, recorded responses

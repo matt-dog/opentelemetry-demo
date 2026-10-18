@@ -25,6 +25,13 @@ components:
       # each user flow shows in Jaeger as several root spans.
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
         value: http://$(OTEL_COLLECTOR_NAME):4317
+    # The image's locustfile with shopping prompts for the agent on Claude
+    # (load-generator/locustfile.py; up.sh makes the ConfigMap from it).
+    mountedConfigMaps:
+      - name: locustfile
+        existingConfigMap: load-generator-locustfile
+        mountPath: /usr/src/app/locustfile.py
+        subPath: locustfile.py
   agent:
     # The shop's AI agent on a real Claude model instead of its recorded
     # responses, so Agent Observability shows real tokens and cost. llm.py is
