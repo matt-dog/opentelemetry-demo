@@ -74,6 +74,11 @@ helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
   --values "$HERE/values-local.yaml" >/dev/null
 
 kubectl apply -f "$HERE/shopper.yaml" >/dev/null
+# The scenarios pod posts a Datadog change event at every flag flip.
+kubectl -n "$NS" create configmap scenarios-env --from-literal=DD_ENV="$ENV_NAME" --from-literal=DD_SITE="$DD_SITE" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n "$NS" create secret generic scenarios-dd --from-literal=DD_API_KEY="$(op read "$DD_API_KEY_REF")" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl apply -f "$HERE/scenarios.yaml" >/dev/null
 
 echo "Waiting for every pod to be Ready (up to 10 minutes)"

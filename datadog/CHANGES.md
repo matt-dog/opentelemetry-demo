@@ -25,6 +25,18 @@ into git or undone.
 
 ## Log
 
+### 2026-10-18 · Three scenarios, each flip a Datadog change event
+- **What:** `local/scenarios.yaml` now runs three non-overlapping windows each hour, UTC:
+  `paymentFailure` 25% from :00 to :10, `aiRunawayAgent` on from :15 to :25, `adHighCpu` from :30
+  to :45. At every flip it posts a change event (`/api/v2/events`, category `change`) on the affected
+  service. `up.sh` creates the `scenarios-env` ConfigMap (env, site) and the `scenarios-dd` secret
+  (API key from 1Password).
+- **Why:** one problem per act of the tour, each with a quiet baseline, and the cause shown next to
+  the effect: change tracking lists the flag flip on the service and as a marker on its graphs.
+  Verified 23:00:17Z (`paymentFailure 25% (payment)` in change tracking).
+- **Notes:** `aiRunawayAgent` on asks for 20 tool calls per prompt, past the agent's graph limit
+  of 25, so some prompts end in a recursion error.
+
 ### 2026-10-18 · Load generator prompts for the agent on Claude
 - **What:** `local/load-generator/locustfile.py` is the demo image's own `locustfile.py`
   (3.1.0) mounted over it from the `load-generator-locustfile` ConfigMap (`up.sh` creates it). Two

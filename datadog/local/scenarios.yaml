@@ -5,9 +5,13 @@
 #
 # Each entry turns one flag to `variant` from minute `minutes[0]` up to (not
 # including) `minutes[1]` of every hour, UTC, and back to "off" otherwise. The
+# windows don't overlap, so each act of the tour has one problem at a time. The
 # pod owns only the flags listed here; a change to one of them in the flagd UI
-# is put back within 30 s. Edit the schedule and `kubectl apply -f` this file,
-# then `kubectl -n otel-demo rollout restart deploy/scenarios`.
+# is put back within 30 s. Every flip is also posted to Datadog as a change
+# event on the affected service (`service` in the entry), so it shows as a
+# marker on graphs and in the service's change list. Edit the schedule and
+# `kubectl apply -f` this file, then
+# `kubectl -n otel-demo rollout restart deploy/scenarios`.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -16,13 +20,17 @@ metadata:
 data:
   schedule.json: |
     [
-      {"flag": "adHighCpu", "variant": "on", "minutes": [30, 45]}
+      {"flag": "paymentFailure", "variant": "25%", "minutes": [0, 10], "service": "payment"},
+      {"flag": "aiRunawayAgent", "variant": "on", "minutes": [15, 25], "service": "agent"},
+      {"flag": "adHighCpu", "variant": "on", "minutes": [30, 45], "service": "ad"}
     ]
   scenarios.py: |
     import json, os, time, urllib.request
     from datetime import datetime, timezone
 
     API = os.environ.get("FLAGD_UI_API", "http://flagd:4000/api")
+    EVENTS = f"https://event-management-intake.{os.environ.get('DD_SITE', 'datadoghq.com')}/api/v2/events"
+    ENV = os.environ.get("DD_ENV", "")
     SCHEDULE = json.load(open("/app/schedule.json"))
 
     def call(path, body=None):
@@ -36,6 +44,28 @@ data:
         start, end = entry["minutes"]
         return entry["variant"] if start <= minute < end else "off"
 
+    def change_event(entry, old, new):
+        key = os.environ.get("DD_API_KEY")
+        if not key:
+            return
+        service = entry.get("service", "")
+        body = {"data": {"type": "event", "attributes": {
+            "category": "change", "integration_id": "custom-events",
+            "title": f"{entry['flag']} {new} ({service})",
+            "message": f"Scenario schedule set feature flag {entry['flag']} from {old} to {new}.",
+            "tags": [f"env:{ENV}", f"service:{service}", "source:scenarios"],
+            "attributes": {
+                "changed_resource": {"name": entry["flag"], "type": "feature_flag"},
+                "impacted_resources": [{"name": service, "type": "service"}],
+                "prev_value": {"variant": old}, "new_value": {"variant": new},
+                "author": {"name": "scenarios", "type": "automation"}}}}}
+        req = urllib.request.Request(EVENTS, data=json.dumps(body).encode(), method="POST",
+                                     headers={"Content-Type": "application/json", "DD-API-KEY": key})
+        try:
+            urllib.request.urlopen(req, timeout=10).close()
+        except Exception as e:
+            print("change event failed:", e, flush=True)
+
     print("schedule:", json.dumps(SCHEDULE), flush=True)
     while True:
         try:
@@ -46,12 +76,15 @@ data:
                 flag = flags[entry["flag"]]
                 want = wanted(entry, minute)
                 if flag["defaultVariant"] != want:
+                    changed.append((entry, flag["defaultVariant"], want))
                     flag["defaultVariant"] = want
-                    changed.append(f"{entry['flag']}={want}")
             if changed:
                 # flagd-ui replaces the whole flag file with what it is given.
                 call("/write", {"data": {"flags": flags}})
-                print(datetime.now(timezone.utc).isoformat(timespec="seconds"), "set", ", ".join(changed), flush=True)
+                for entry, old, new in changed:
+                    change_event(entry, old, new)
+                print(datetime.now(timezone.utc).isoformat(timespec="seconds"), "set",
+                      ", ".join(f"{e['flag']}={n}" for e, _, n in changed), flush=True)
         except Exception as e:
             print("scenarios error:", e, flush=True)
         time.sleep(30)
@@ -72,6 +105,13 @@ spec:
         - name: scenarios
           image: python:3.12-slim
           command: ["python", "-u", "/app/scenarios.py"]
+          env:
+            - name: DD_ENV
+              valueFrom: {configMapKeyRef: {name: scenarios-env, key: DD_ENV}}
+            - name: DD_SITE
+              valueFrom: {configMapKeyRef: {name: scenarios-env, key: DD_SITE}}
+            - name: DD_API_KEY
+              valueFrom: {secretKeyRef: {name: scenarios-dd, key: DD_API_KEY, optional: true}}
           volumeMounts: [{name: app, mountPath: /app}]
           resources:
             requests: {cpu: 10m, memory: 32Mi}
