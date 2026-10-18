@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Apply the Datadog objects in datadog/ (monitors, log index) for one demo env.
+"""Apply the Datadog objects in datadog/ (monitors, log index, RUM application) for one demo env.
 
   DD_API_KEY=... DD_APP_KEY=... ENV_NAME=otel-demo-gke-blog datadog/local/dd-apply.py
+
+With RUM_OUT=<file>, the RUM application's id and client token are written to that file
+(mode 600) for up.sh to put in a Kubernetes secret; they are never written to git.
 
 Every file is a template: ${ENV_NAME} is filled in, so the same definitions serve
 any env. Monitors are matched by name and created or updated in place, tagged
@@ -80,6 +83,25 @@ def apply_index(ix):
         print(f"log index {name} moved to the front of the index order")
 
 
+def apply_rum(app, out):
+    """Create the RUM application if missing; write its id and client token to `out`."""
+    _, found = call("GET", "/api/v2/rum/applications")
+    same = [a for a in (found or {}).get("data", []) if a["attributes"]["name"] == app["name"]]
+    if same:
+        app_id = same[0]["attributes"].get("application_id") or same[0]["id"]
+        print(f"RUM application exists: {app['name']}")
+    else:
+        _, made = call("POST", "/api/v2/rum/applications",
+                       {"data": {"type": "rum_application_create", "attributes": app}})
+        app_id = made["data"]["attributes"]["application_id"]
+        print(f"RUM application created: {app['name']}")
+    _, one = call("GET", f"/api/v2/rum/applications/{app_id}")
+    token = one["data"]["attributes"]["client_token"]
+    if out:
+        Path(out).write_text(f"DD_RUM_APPLICATION_ID={app_id}\nDD_RUM_CLIENT_TOKEN={token}\n")
+        os.chmod(out, 0o600)
+
+
 def main():
     env = os.environ["ENV_NAME"]
     if not os.environ.get("DD_APP_KEY"):
@@ -87,6 +109,7 @@ def main():
         return
     try:
         apply_index(load(HERE / "log-index.json", env))
+        apply_rum(load(HERE / "rum-application.json", env), os.environ.get("RUM_OUT"))
         for f in sorted((HERE / "monitors").glob("*.json")):
             apply_monitor(load(f, env))
     except Refused as e:

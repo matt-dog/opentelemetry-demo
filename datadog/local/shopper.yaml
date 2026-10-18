@@ -1,5 +1,6 @@
 # A headless Chromium that shops like a person: home page, a product, Add To
-# Cart, Place Order, every 20 seconds. The shop's own browser instrumentation
+# Cart, Place Order, then a question to the shop's AI assistant (/chatbot/),
+# every 20 seconds. The shop's own browser instrumentation
 # (frontend-web) starts each trace at the click, so a checkout trace reads
 # browser -> frontend-proxy -> frontend -> checkout -> payment, with no load
 # generator span on top. See README.md.
@@ -14,6 +15,11 @@ data:
     from playwright.sync_api import sync_playwright
 
     BASE = "http://frontend-proxy:8080"
+    QUESTIONS = [
+        "Any deals on telescopes today?",
+        "I just bought a telescope. What accessory would you recommend, and is it on sale?",
+        "What's on promotion right now, and how much is it in GBP?",
+    ]
     with sync_playwright() as p:
         browser = p.chromium.launch()
         while True:
@@ -41,6 +47,16 @@ data:
                 print("checkout status", resp.value.status, flush=True)
                 time.sleep(15)  # let the browser exporter flush the click and fetch spans
                 print("done:", page.url, flush=True)
+                # Then ask the shop's AI assistant (chatbot -> agent -> Claude ->
+                # shop services), in the same browser session, so RUM shows the
+                # shopping and the question together.
+                page.goto(BASE + "/chatbot/", wait_until="load")
+                box = page.locator("textarea").first
+                box.wait_for(timeout=30000)
+                box.fill(random.choice(QUESTIONS))
+                box.press("Enter")
+                page.wait_for_timeout(25000)  # the answer, then the RUM and OTel flush
+                print("asked the assistant", flush=True)
             except Exception as e:
                 print("shopper error:", e, flush=True)
             finally:

@@ -25,6 +25,25 @@ into git or undone.
 
 ## Log
 
+### 2026-10-18 · RUM with the Datadog Browser SDK; the shopper asks the AI assistant
+- **What:**
+  - `local/datadog/rum-application.json`: the RUM application, created by `dd-apply.py`, which
+    writes its id and client token to a mode-600 temp file (`RUM_OUT`). `up.sh` turns that into
+    the `rum-config` secret and now runs `dd-apply.py` before the shop is installed.
+  - `local/frontend-proxy/envoy.tmpl.yaml`: the demo image's Envoy template (3.1.0) mounted over
+    it, plus a Lua filter that inserts the RUM Browser SDK (v7, CDN) after `<head>` on the shop's
+    and the chatbot's pages. It asks for an uncompressed body on page paths only; API, assets,
+    Jaeger, Grafana and the flag UI are skipped. RUM service `frontend-web` (the name the shop's
+    browser spans already use), Session Replay at 100%, `allowedTracingUrls` on the shop's origin
+    with the W3C `tracecontext` propagator.
+  - `local/shopper.yaml`: after each checkout the shopper opens `/chatbot/` and asks one of three
+    shopping questions.
+- **Why:** RUM, Session Replay and the link from a user action to its OpenTelemetry backend trace,
+  with no Agent; and one browser session that covers shopping and the AI assistant (chatbot, agent,
+  Claude, shop services). The shop's source and images are unchanged.
+- **Notes:** the shop's own OTel browser SDK also sets `traceparent` on the same requests; which
+  one wins decides which trace a RUM resource links to. To check in the RUM UI.
+
 ### 2026-10-18 · Three scenarios, each flip a Datadog change event
 - **What:** `local/scenarios.yaml` now runs three non-overlapping windows each hour, UTC:
   `paymentFailure` 25% from :00 to :10, `aiRunawayAgent` on from :15 to :25, `adHighCpu` from :30

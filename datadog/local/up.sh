@@ -56,6 +56,25 @@ DD_API_KEY="$(op read "$DD_API_KEY_REF")" DD_SITE="$DD_SITE" \
   DEPLOYMENT_ENVIRONMENT_NAME="$ENV_NAME" \
   "$KUBE_STACK_DIR/install" "$HERE/kube-stack-values.yaml" >/dev/null
 
+# ---- Datadog objects from git (datadog/, applied by dd-apply.py) -----------------
+# Monitors, the log index and the RUM application. Runs before the shop so the
+# rum-config secret (application id and client token) exists when Envoy starts.
+# Skips with a warning when the application key is missing or refused.
+rum_out="$(mktemp)"; chmod 600 "$rum_out"
+DD_API_KEY="$(op read "$DD_API_KEY_REF")" DD_APP_KEY="$(op read "$DD_APP_KEY_REF" 2>/dev/null || true)" \
+  DD_SITE="$DD_SITE" ENV_NAME="$ENV_NAME" RUM_OUT="$rum_out" python3 "$HERE/dd-apply.py" \
+  || echo "dd-apply.py failed; the demo is up without its monitors, log index and RUM" >&2
+kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+if [ -s "$rum_out" ]; then
+  echo "DD_RUM_ENV=$ENV_NAME" >>"$rum_out"
+  kubectl -n "$NS" create secret generic rum-config --from-env-file="$rum_out" \
+    --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+fi
+rm -f "$rum_out"
+kubectl -n "$NS" create configmap frontend-proxy-envoy \
+  --from-file=envoy.tmpl.yaml="$HERE/frontend-proxy/envoy.tmpl.yaml" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+
 # ---- the shop ----------------------------------------------------------------------
 helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts >/dev/null 2>&1 || true
 helm repo update open-telemetry >/dev/null
@@ -102,12 +121,6 @@ json.dump(d, open(sys.argv[1] + ".new", "w"), indent=2)
 PY
 kubectl -n "$NS" exec -i deploy/flagd -c flagd-ui -- sh -c 'cat > /app/data/demo.flagd.json' <"$flags.new"
 rm -f "$flags" "$flags.new"
-
-# ---- Datadog monitors and log index (datadog/, applied by dd-apply.py) ------------
-# Skips with a warning when the application key is missing or refused.
-DD_API_KEY="$(op read "$DD_API_KEY_REF")" DD_APP_KEY="$(op read "$DD_APP_KEY_REF" 2>/dev/null || true)" \
-  DD_SITE="$DD_SITE" ENV_NAME="$ENV_NAME" python3 "$HERE/dd-apply.py" \
-  || echo "dd-apply.py failed; the demo is up without its monitors and log index" >&2
 
 cat <<MSG
 

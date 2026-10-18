@@ -32,6 +32,26 @@ components:
         existingConfigMap: load-generator-locustfile
         mountPath: /usr/src/app/locustfile.py
         subPath: locustfile.py
+  frontend-proxy:
+    # The image's Envoy template plus a Lua filter that adds the Datadog RUM
+    # Browser SDK to the shop's and the chatbot's pages
+    # (frontend-proxy/envoy.tmpl.yaml; up.sh makes the ConfigMap and the
+    # rum-config secret, the RUM application from dd-apply.py).
+    mountedConfigMaps:
+      - name: envoy-template
+        existingConfigMap: frontend-proxy-envoy
+        mountPath: /home/envoy/envoy.tmpl.yaml
+        subPath: envoy.tmpl.yaml
+    envOverrides:
+      - name: DD_RUM_APPLICATION_ID
+        valueFrom:
+          secretKeyRef: {name: rum-config, key: DD_RUM_APPLICATION_ID}
+      - name: DD_RUM_CLIENT_TOKEN
+        valueFrom:
+          secretKeyRef: {name: rum-config, key: DD_RUM_CLIENT_TOKEN}
+      - name: DD_RUM_ENV
+        valueFrom:
+          secretKeyRef: {name: rum-config, key: DD_RUM_ENV}
   agent:
     # The shop's AI agent on a real Claude model instead of its recorded
     # responses, so Agent Observability shows real tokens and cost. llm.py is

@@ -1,0 +1,4 @@
+{
+  "name": "astronomy-shop (${ENV_NAME})",
+  "type": "browser"
+}
