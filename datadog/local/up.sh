@@ -23,7 +23,7 @@ GKE_ZONE="${GKE_ZONE:-us-east1-b}"
 GKE_CLUSTER="${GKE_CLUSTER:-otel-demo-blog}"
 
 kubeconfig="$(mktemp)"
-trap 'rm -f "$kubeconfig"' EXIT
+trap 'rm -f "$kubeconfig" "${kube_stack_values:-}"' EXIT
 chmod 600 "$kubeconfig"
 export KUBECONFIG="$kubeconfig"
 
@@ -49,12 +49,15 @@ case "$TARGET" in
 esac
 
 # ---- kube-stack: OTel Operator + DDOT collectors, via its own installer ----------
+# The overlay names the env in host tags (__ENV_NAME__); fill it in for this target.
+kube_stack_values="$(mktemp)"
+sed "s/__ENV_NAME__/$ENV_NAME/g" "$HERE/kube-stack-values.yaml" >"$kube_stack_values"
 echo "Installing kube-stack (ddot flow, host profiler $HOST_PROFILER) with the shop overlay"
 DD_API_KEY="$(op read "$DD_API_KEY_REF")" DD_SITE="$DD_SITE" \
   DD_INSTALL_FLOW=ddot DD_AGENT_ENABLED=false DD_HOST_PROFILER_ENABLED="$HOST_PROFILER" \
   K8S_CLUSTER_NAME="$ENV_NAME" K8S_CLUSTER_TYPE="$CLUSTER_TYPE" \
   DEPLOYMENT_ENVIRONMENT_NAME="$ENV_NAME" \
-  "$KUBE_STACK_DIR/install" "$HERE/kube-stack-values.yaml" >/dev/null
+  "$KUBE_STACK_DIR/install" "$kube_stack_values" >/dev/null
 
 # ---- Datadog objects from git (datadog/, applied by dd-apply.py) -----------------
 # Monitors, the log index and the RUM application. Runs before the shop so the

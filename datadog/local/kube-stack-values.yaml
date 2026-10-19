@@ -5,10 +5,29 @@
 #
 #   DD_INSTALL_FLOW=ddot ... ./install <path to this file>
 #
-# Arrays replace on merge, so each exporter list below is complete.
+# Arrays replace on merge, so each exporter and processor list below is complete.
+#
+# One host name per node (resource/dd_hostname, in every collector): Datadog
+# resolves the host from datadog.host.name before anything else, so each item gets
+# its k8s.node.name, or the collector's own node for node-local and cluster-wide
+# data. Without it each node showed up three times: <node> (the exporter's own
+# host), <node>.<project> (GCP detector host.name + cloud.account.id) and
+# <node>.c.<project>.internal (the host profiler). The chart prepends
+# k8s_attributes and appends resource/global to each pipeline, so the lists below
+# leave those out. __ENV_NAME__ is filled in by up.sh. See
+# https://docs.datadoghq.com/opentelemetry/mapping/hostname/
 collectors:
   daemon:
     config:
+      processors:
+        resource/dd_hostname: &dd_hostname
+          attributes:
+            - {key: datadog.host.name, from_attribute: k8s.node.name, action: upsert}
+            - {key: datadog.host.name, value: "${env:OTEL_K8S_NODE_NAME}", action: insert}
+        # The base sets the chart's resource/hostname to null to remove it; reapplied
+        # with helm --reuse-values the null survives and the collector rejects an
+        # empty processor. Defining it (unused by any pipeline) keeps the config valid.
+        resource/hostname: *dd_hostname
       receivers:
         otlp:
           protocols:
@@ -21,6 +40,10 @@ collectors:
         # RED metrics for the shop's Grafana dashboards, as the demo chart does.
         span_metrics: {}
       exporters:
+        # Host tags on the node, so the host map and host list filter by cluster.
+        datadog/exporter:
+          host_metadata:
+            tags: [kube_cluster_name:__ENV_NAME__, cluster_name:__ENV_NAME__, env:__ENV_NAME__]
         otlp_grpc/jaeger:
           endpoint: jaeger.otel-demo.svc.cluster.local:4317
           tls:
@@ -33,7 +56,16 @@ collectors:
         pipelines:
           # Every trace, before the Datadog sampling pipeline.
           traces:
+            processors: [resource_detection/env, resource/dd_hostname]
             exporters: [datadog/connector, otlp_grpc/jaeger, span_metrics]
+          logs:
+            processors: [resource_detection/env, resource/dd_hostname]
+          metrics:
+            processors: [resource_detection/env, cumulative_to_delta, delta_to_rate, resource/dd_hostname]
+          metrics/cadvisor:
+            processors:
+              [resource_detection/env, transform/cadvisor_labels, groupbyattrs, k8s_attributes,
+               cumulative_to_delta, delta_to_rate/cadvisor, resource/dd_hostname]
           # Prometheus takes cumulative metrics; the Datadog pipeline converts to
           # delta, so the shop's metrics reach Prometheus on their own pipeline.
           metrics/prometheus:
@@ -42,3 +74,35 @@ collectors:
           metrics/span_metrics_prometheus:
             receivers: [span_metrics]
             exporters: [otlp_http/prometheus]
+
+  cluster:
+    config:
+      processors:
+        resource/dd_hostname: *dd_hostname
+      exporters:
+        datadog/exporter:
+          host_metadata:
+            tags: [kube_cluster_name:__ENV_NAME__, cluster_name:__ENV_NAME__, env:__ENV_NAME__]
+      service:
+        pipelines:
+          logs:
+            processors: [resource_detection/env, resource/dd_hostname]
+          metrics:
+            processors:
+              [transform/ksm_to_dd, transform/rename_uid, groupbyattrs, k8s_attributes,
+               resource_detection/env, cumulative_to_delta, transform/sum_to_gauge, resource/dd_hostname]
+          metrics/count:
+            processors: [resource/dd_hostname]
+          metrics/otel_operator:
+            processors: [resource_detection/env, cumulative_to_delta, resource/dd_hostname]
+
+  host-profiler:
+    config:
+      processors:
+        resource/dd_hostname: *dd_hostname
+      service:
+        pipelines:
+          metrics:
+            processors: [resource/dd_hostname]
+          profiles:
+            processors: [resource/dd_hostname]

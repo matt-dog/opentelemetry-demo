@@ -25,6 +25,23 @@ into git or undone.
 
 ## Log
 
+### 2026-10-19 · One host name per node
+- **What:** `local/kube-stack-values.yaml` adds `resource/dd_hostname` to every Datadog pipeline of the
+  daemon, cluster and host-profiler collectors: `datadog.host.name` from the item's `k8s.node.name`,
+  else the collector's own node (`OTEL_K8S_NODE_NAME`). Both Datadog exporters send
+  `kube_cluster_name`, `cluster_name` and `env` as host tags. `resource/hostname` is defined too,
+  because the base's `null` for it survives `helm --reuse-values` and the collector rejects an empty
+  processor (one daemon pod crash-looped on that before the fix). `up.sh` fills `__ENV_NAME__` into a
+  temp copy of the overlay. Applied with `helm upgrade --reuse-values` on the kube-stack release.
+- **Why:** each node showed as three hosts: `<node>` (the exporter's own host), `<node>.<project>`
+  (Datadog's GCP rule: detector `host.name` plus `cloud.account.id`) and
+  `<node>.c.<project>.internal` (the host profiler). Tags sat on one, metrics on another, so the host
+  map's cluster filter and the profiling host filter came up empty. Datadog resolves
+  `datadog.host.name` first (docs: opentelemetry/mapping/hostname). Verified 01:48Z: spans, node
+  metrics and profiles report only the three bare node names; the old series stopped at 01:47:58Z.
+- **Notes:** the shop's browser spans (`frontend-web`) now have no host, which is right for spans
+  from a browser. `git.repository.id` on spans doesn't come from the pipeline.
+
 ### 2026-10-18 · DDOT SDK on ad: traces work, logs don't yet; kept opt-in
 - **What:** `local/ddot-sdk-ad.values.yaml` (not applied by `up.sh`): an init container copies the
   agent jar from `datadog/dd-otel-autoinstrumentation-java:1.67-preview`, `JAVA_TOOL_OPTIONS` points
