@@ -109,8 +109,13 @@ all signals: `ddot` -10.2%, `ddototlp` -64.5%).
 - Parity, `r1` first half (10:38 to 11:24): ingested spans and log events per
   env within 0.7% of what the tee sent, for all three arms. Trace metrics
   (`trace.http.server.request.hits`, `trace.grpc.server.request.hits`) present
-  for `ddototlp` and within 0.7% of the Datadog Exporter arms. Metric series
-  per env not yet compared.
+  for `ddototlp` and within 0.7% of the Datadog Exporter arms.
+- Metrics parity, `r2`: identical across all three envs for converted types
+  (`http.server.request.duration` and `rpc.server.duration` counts,
+  `demo.payment.transactions`) and for UpDownCounters, which `cumulativetodelta`
+  leaves cumulative (`jvm.thread.count`, `http.server.active_requests`). The OTLP
+  intake drops cumulative metrics, so delta conversion is required; `ddototlp`
+  has run `cumulativetodelta` since the first commit, and nothing was missing.
 
 ### Against contrib (campaign `c1`, 2026-10-15)
 
