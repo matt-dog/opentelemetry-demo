@@ -25,6 +25,14 @@ into git or undone.
 
 ## Log
 
+### 2026-10-19 · Monitors: 15-minute recovery; threshold monitor applied
+- **What:** `ad-latency-anomaly.json` recovers after 15 minutes without out-of-band points
+  (`recovery_window: last_15m`, was 3). `ad-latency-threshold.json` applied (monitor 334131509).
+- **Why:** with a 3-minute recovery the anomaly monitor went green about 5 minutes into the
+  incident, because `basic` absorbs the new level, while latency was still high. It now stays red
+  from about :33 to about :47, which matches the incident. The threshold monitor is red for the whole
+  :30 to :45 window.
+
 ### 2026-10-19 · One host name per node
 - **What:** `local/kube-stack-values.yaml` adds `resource/dd_hostname` to every Datadog pipeline of the
   daemon, cluster and host-profiler collectors: `datadog.host.name` from the item's `k8s.node.name`,
