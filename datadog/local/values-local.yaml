@@ -52,6 +52,9 @@ components:
       - name: DD_RUM_ENV
         valueFrom:
           secretKeyRef: {name: rum-config, key: DD_RUM_ENV}
+      - name: DD_RUM_SITE
+        valueFrom:
+          secretKeyRef: {name: rum-config, key: DD_RUM_SITE}
   agent:
     # The shop's AI agent on a real Claude model instead of its recorded
     # responses, so Agent Observability shows real tokens and cost. llm.py is

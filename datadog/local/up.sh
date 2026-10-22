@@ -3,7 +3,7 @@
 # kube-stack installer runs (OTel Operator + kube-stack, ddot flow). See README.md.
 #
 #   datadog/local/up.sh local   Rancher Desktop (context rancher-desktop)
-#   datadog/local/up.sh gke     GKE cluster otel-demo-blog, created if missing
+#   datadog/local/up.sh gke     GKE cluster otel-demo, created if missing
 #
 # Every kubectl and helm call uses a kubeconfig holding only the target cluster,
 # so the current context is never used or changed.
@@ -13,14 +13,15 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 TARGET="${1:-local}"
 NS=otel-demo
 DEMO_CHART_VERSION=0.42.1
-DD_SITE="${DD_SITE:-datadoghq.com}"
-DD_API_KEY_REF="${DD_API_KEY_REF:-op://Employee/ddot-lab/DD_API_KEY}"
-DD_APP_KEY_REF="${DD_APP_KEY_REF:-op://Employee/ddot-lab/DD_APP_KEY}"
+# The matt-dog org on datad0g.com. Set DD_SITE and the two refs to send elsewhere.
+DD_SITE="${DD_SITE:-datad0g.com}"
+DD_API_KEY_REF="${DD_API_KEY_REF:-op://Employee/ddot-lab/matt-dog-dd-api-key}"
+DD_APP_KEY_REF="${DD_APP_KEY_REF:-op://Employee/ddot-lab/matt-dog-dd-app-key}"
 ANTHROPIC_API_KEY_REF="${ANTHROPIC_API_KEY_REF:-op://Employee/ddot-lab/ANTHROPIC_API_KEY}"
 KUBE_STACK_DIR="${KUBE_STACK_DIR:-$HOME/code/opentelemetry-examples/guides/kubernetes/configuration/opentelemetry-kube-stack}"
 GCP_PROJECT="${GCP_PROJECT:-dd-dev-otelpmdev}"
 GKE_ZONE="${GKE_ZONE:-us-east1-b}"
-GKE_CLUSTER="${GKE_CLUSTER:-otel-demo-blog}"
+GKE_CLUSTER="${GKE_CLUSTER:-otel-demo}"
 
 kubeconfig="$(mktemp)"
 trap 'rm -f "$kubeconfig" "${kube_stack_values:-}"' EXIT
@@ -39,14 +40,18 @@ case "$TARGET" in
       # The project has no "default" network; use the ddot-lab one.
       gc create "$GKE_CLUSTER" --network ddot-lab --subnetwork ddot-lab-us-east1 \
         --enable-ip-alias --machine-type e2-standard-4 --num-nodes 3 \
-        --labels purpose=ddot-blog-demo --quiet >/dev/null
+        --labels purpose=otel-demo --quiet >/dev/null
     fi
     gc get-credentials "$GKE_CLUSTER" >/dev/null 2>&1   # writes only to $KUBECONFIG
-    ENV_NAME=otel-demo-gke-blog; CLUSTER_TYPE=gcp
+    ENV_NAME=otel-demo; CLUSTER_TYPE=gcp
     # GKE nodes meet the eBPF profiler's needs (kernel >= 5.10, Kubernetes >= 1.30).
     HOST_PROFILER="${DD_HOST_PROFILER_ENABLED:-true}" ;;
   *) echo "usage: up.sh [local|gke]" >&2; exit 2 ;;
 esac
+
+# ---- the API key must belong to DD_SITE; a key from another site is dropped silently --
+res="$(curl -s "https://api.$DD_SITE/api/v1/validate" -H "DD-API-KEY: $(op read "$DD_API_KEY_REF")")"
+[ "$res" = '{"valid":true}' ] || { echo "DD_API_KEY ($DD_API_KEY_REF) is not valid on $DD_SITE: $res" >&2; exit 1; }
 
 # ---- kube-stack: OTel Operator + DDOT collectors, via its own installer ----------
 # The overlay names the env in host tags (__ENV_NAME__); fill it in for this target.
@@ -69,7 +74,7 @@ DD_API_KEY="$(op read "$DD_API_KEY_REF")" DD_APP_KEY="$(op read "$DD_APP_KEY_REF
   || echo "dd-apply.py failed; the demo is up without its monitors, log index and RUM" >&2
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 if [ -s "$rum_out" ]; then
-  echo "DD_RUM_ENV=$ENV_NAME" >>"$rum_out"
+  printf "DD_RUM_ENV=%s\nDD_RUM_SITE=%s\n" "$ENV_NAME" "$DD_SITE" >>"$rum_out"
   kubectl -n "$NS" create secret generic rum-config --from-env-file="$rum_out" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 fi
@@ -107,7 +112,7 @@ echo "Waiting for every pod to be Ready (up to 10 minutes)"
 kubectl -n "$NS" wait --for=condition=Ready pods --all --timeout=600s >/dev/null \
   || echo "some pods are not Ready yet: kubectl -n $NS get pods" >&2
 
-# ---- failure scenarios for the blog's error traces --------------------------------
+# ---- failure scenarios for error traces -------------------------------------------
 # flagd reads this file live. It resets when the flagd pod restarts; rerun up.sh.
 echo "Setting feature flags: paymentFailure 50%, cartFailure 100%, productCatalogFailure on"
 flags="$(mktemp)"
@@ -128,7 +133,7 @@ rm -f "$flags" "$flags.new"
 cat <<MSG
 
 Astronomy Shop is up ($TARGET), collected by the kube-stack DDOT Collector.
-  Datadog:  https://ddstaging.datadoghq.com/apm/traces?query=env%3A$ENV_NAME
+  Datadog:  https://app.$DD_SITE/apm/traces?query=env%3A$ENV_NAME
 MSG
 if [ "$TARGET" = gke ]; then
   echo "  kubectl: gcloud container clusters get-credentials $GKE_CLUSTER --project $GCP_PROJECT --zone $GKE_ZONE"

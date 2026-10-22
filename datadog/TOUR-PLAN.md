@@ -12,7 +12,8 @@ optional enabler, for the "full value" slides (20 and 21).
 
 ## Decisions (2026-10-18)
 
-- Org: ddstaging. Every link and query is scoped to `env:otel-demo-gke-blog`, because another team
+- Org (since 2026-10-22): matt-dog on datad0g.com, env `otel-demo`; see `ENVIRONMENT.md`.
+- Org (until 2026-10-22): ddstaging. Every link and query is scoped to `env:otel-demo-gke-blog`, because another team
   runs the same demo in the org.
 - RUM: the Datadog Browser SDK, installed in the shop's frontend path.
 - Components: DDOT Collector throughout, the DDOT SDK, and the DDOT Host Profiler.

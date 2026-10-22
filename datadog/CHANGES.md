@@ -1,16 +1,17 @@
 # Changes from the upstream OpenTelemetry Demo
 
 A running log of how this fork (matt-dog/opentelemetry-demo, branch
-`ddot-local-blog`) differs from upstream (open-telemetry/opentelemetry-demo), and
+`datadog-demo`, `ddot-local-blog` until 2026-10-22) differs from upstream (open-telemetry/opentelemetry-demo), and
 why. Newest first. The README tables describe the current state; this file keeps
-the history.
+the history. `ENVIRONMENT.md` records where it runs and what it depends on
+outside this repo, for handover.
 
 Nothing in the upstream source, images or Helm chart is modified. Every
 difference is a new file under `datadog/`, or one of the few lines in
 `.gitignore`, or an override passed to the upstream chart (0.42.1). Check with:
 
 ```bash
-git diff --stat upstream/main...ddot-local-blog
+git diff --stat upstream/main...datadog-demo
 ```
 
 Add an entry with every commit that changes the difference, and record changes
@@ -24,6 +25,32 @@ into git or undone.
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-10-22 · Branch renamed `datadog-demo`; ENVIRONMENT.md for handover
+- **What:** branch `ddot-local-blog` renamed `datadog-demo`. New `ENVIRONMENT.md`: the Datadog
+  org, keys (as `op://` references), objects in the org, org settings and internal flags, the GKE
+  cluster, and code outside this repo. Blog wording removed from `local/README.md`.
+- **Why:** the demo is no longer for the DDOT launch blog. It is the general demo, to be handed
+  over to demo engineering, so the environment is recorded next to the changes from upstream.
+
+### 2026-10-22 · Local demo sends to the matt-dog org on datad0g.com
+- **What:** `local/up.sh` defaults to `DD_SITE=datad0g.com` and reads its keys from
+  `op://Employee/ddot-lab/matt-dog-dd-api-key` and `matt-dog-dd-app-key` (was ddstaging on datadoghq.com,
+  `DD_API_KEY` and `DD_APP_KEY` fields). The GKE target is cluster `otel-demo`, env
+  `otel-demo` (was `otel-demo-blog`, env `otel-demo-gke-blog`). It now checks the API key against the site before installing anything,
+  and prints an `app.$DD_SITE` link. The RUM snippet's `site` comes from `DD_RUM_SITE` in the
+  rum-config secret (was hardcoded `datadoghq.com`). `dd-apply.py` and `scenarios.yaml`
+  default to datad0g.com. The Anthropic key stays on `ddot-lab`.
+- **Why:** an org of Matthew's own gives full control over feature flags, monitors and
+  indexes without sharing ddstaging with other teams. All of it can still point back at
+  ddstaging by setting `DD_SITE`, `DD_API_KEY_REF` and `DD_APP_KEY_REF`.
+- **dd-apply.py:** each object (log index, RUM application, each monitor) is applied on its own,
+  so a key refused for one still applies the rest (was: the first refusal skipped everything).
+  In matt-dog the log index is optional; `main` has no exclusion filter there. Creating it is
+  refused (403) even with an unscoped app key, so the index is skipped there for now.
+- **Cluster:** `otel-demo-blog` (ddstaging) and the old Home-tab `otel-demo` (asleep) were deleted
+  and `otel-demo` recreated from this branch. Data confirmed in matt-dog: logs and spans from every
+  shop service, 963 active metrics, 6 hosts. RUM application and both monitors created there.
 
 ### 2026-10-19 · Monitors: 15-minute recovery; threshold monitor applied
 - **What:** `ad-latency-anomaly.json` recovers after 15 minutes without out-of-band points

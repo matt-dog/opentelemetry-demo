@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Apply the Datadog objects in datadog/ (monitors, log index, RUM application) for one demo env.
 
-  DD_API_KEY=... DD_APP_KEY=... ENV_NAME=otel-demo-gke-blog datadog/local/dd-apply.py
+  DD_API_KEY=... DD_APP_KEY=... ENV_NAME=otel-demo datadog/local/dd-apply.py
 
 With RUM_OUT=<file>, the RUM application's id and client token are written to that file
 (mode 600) for up.sh to put in a Kubernetes secret; they are never written to git.
@@ -9,9 +9,9 @@ With RUM_OUT=<file>, the RUM application's id and client token are written to th
 Every file is a template: ${ENV_NAME} is filled in, so the same definitions serve
 any env. Monitors are matched by name and created or updated in place, tagged
 managed_by:otel-demo-local. The log index is created or updated, then moved ahead
-of "main", whose "Reduce volume" exclusion drops 99.99% of what falls through to
-it in the Datadog staging org. DD_SITE is the intake site (default datadoghq.com,
-where that org is homed). up.sh runs this; it exits 0 with a warning when the
+of "main" (in the ddstaging org, its "Reduce volume" exclusion drops 99.99% of
+what falls through to it). DD_SITE is the site (default datad0g.com, where the
+matt-dog org is homed). up.sh runs this; it exits 0 with a warning when the
 application key is missing or refused, since the demo itself works without it.
 """
 import json
@@ -24,7 +24,7 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent / "datadog"
-API = f"https://api.{os.environ.get('DD_SITE', 'datadoghq.com')}"
+API = f"https://api.{os.environ.get('DD_SITE', 'datad0g.com')}"
 TAG = "managed_by:otel-demo-local"
 
 
@@ -107,14 +107,17 @@ def main():
     if not os.environ.get("DD_APP_KEY"):
         print("dd-apply: DD_APP_KEY not set; skipping monitors and log index", file=sys.stderr)
         return
-    try:
-        apply_index(load(HERE / "log-index.json", env))
-        apply_rum(load(HERE / "rum-application.json", env), os.environ.get("RUM_OUT"))
-        for f in sorted((HERE / "monitors").glob("*.json")):
-            apply_monitor(load(f, env))
-    except Refused as e:
-        print(f"dd-apply: the application key was refused ({e}); skipping. It needs monitors and"
-              " log index read/write permissions in the org.", file=sys.stderr)
+    # Each step stands alone, so a key refused for one (say, log indexes) still applies the rest.
+    steps = [("log index", lambda: apply_index(load(HERE / "log-index.json", env))),
+             ("RUM application", lambda: apply_rum(load(HERE / "rum-application.json", env), os.environ.get("RUM_OUT")))]
+    steps += [(f"monitor {f.name}", lambda f=f: apply_monitor(load(f, env)))
+              for f in sorted((HERE / "monitors").glob("*.json"))]
+    for name, step in steps:
+        try:
+            step()
+        except Refused as e:
+            print(f"dd-apply: the application key was refused for the {name} ({e}); skipping it.",
+                  file=sys.stderr)
 
 
 if __name__ == "__main__":

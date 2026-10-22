@@ -29,7 +29,7 @@ data:
     from datetime import datetime, timezone
 
     API = os.environ.get("FLAGD_UI_API", "http://flagd:4000/api")
-    EVENTS = f"https://event-management-intake.{os.environ.get('DD_SITE', 'datadoghq.com')}/api/v2/events"
+    EVENTS = f"https://event-management-intake.{os.environ.get('DD_SITE', 'datad0g.com')}/api/v2/events"
     ENV = os.environ.get("DD_ENV", "")
     SCHEDULE = json.load(open("/app/schedule.json"))
 

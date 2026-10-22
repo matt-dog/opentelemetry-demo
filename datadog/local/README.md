@@ -1,9 +1,12 @@
 # Astronomy Shop on the OTel Operator and kube-stack, with the DDOT Collector
 
-For the DDOT launch blog's screenshots: the familiar OpenTelemetry Demo, collected
+A Datadog demo built on the familiar OpenTelemetry Demo, collected
 by the DDOT Collector that the opentelemetry-examples kube-stack installer runs
 (OTel Operator + kube-stack, ddot flow). The shop keeps its own Jaeger and Grafana;
 Datadog gets everything. Runs on Rancher Desktop or on GKE.
+
+Where it runs (Datadog org, keys, cluster, org settings, outside code) is in
+`datadog/ENVIRONMENT.md`.
 
 ```
  Astronomy Shop services ──OTLP──> kube-stack DDOT daemon collector
@@ -30,14 +33,14 @@ and images with overrides:
 | OpenSearch | on | off | logs go to Datadog |
 | load-generator OTLP endpoint | `:4318` | `:4317` | its exporter is gRPC; at :4318 every export failed, its parent spans were lost, and one user flow showed as many root traces |
 | Jaeger memory | 600Mi, 25,000 traces | 1536Mi, 10,000 traces | OOM-killed under checkout traffic, losing every stored trace |
-| Feature flags (set by `up.sh`, live in flagd) | all off | paymentFailure 50%, cartFailure 100%, productCatalogFailure on for OLJCESPC7Z | error traces for the blog; the shipped productCatalogFailure rule returns "off" on both branches |
-| Host Profiler | none | kube-stack `host-profiler` DaemonSet (DDOT preview image), on by default for `up.sh gke` (`DD_HOST_PROFILER_ENABLED`) | profiles for the blog's second screenshot |
+| Feature flags (set by `up.sh`, live in flagd) | all off | paymentFailure 50%, cartFailure 100%, productCatalogFailure on for OLJCESPC7Z | error traces; the shipped productCatalogFailure rule returns "off" on both branches |
+| Host Profiler | none | kube-stack `host-profiler` DaemonSet (DDOT preview image), on by default for `up.sh gke` (`DD_HOST_PROFILER_ENABLED`) | profiles from the same cluster |
 | `shopper` (new pod) | none | headless Chromium placing an order every 20 s | checkout traces that start at the browser click (`frontend-web`) |
 | `scenarios` (new pod) | flags changed by hand | holds flags to a schedule in `scenarios.yaml`: `adHighCpu` on from :30 to :45 each hour, UTC | a problem at known times with a quiet baseline between, for anomaly monitors and screenshots |
 | ad CPU limit | none | 300m | adHighCpu throttles the JVM, so GetAds slows; with no limit its load threads take spare cores and requests stay at a few ms |
 | agent LLM | recorded responses for three prompts | Claude Haiku 5.5 through LangChain's Anthropic client (`llm.py` replaced from a ConfigMap) | real tokens and cost in Agent Observability |
 | RUM | none | Datadog Browser SDK added to the shop's and chatbot's pages by an Envoy Lua filter (`frontend-proxy/envoy.tmpl.yaml`) | RUM, Session Replay, user action to backend trace |
-| Datadog monitors and log index | none | `datadog/` templates applied by `dd-apply.py` (run by `up.sh`): the ad latency anomaly monitor, and a log index for the env ahead of `main` | the setup is rebuilt from git in any env or org; `${ENV_NAME}` is filled in per env |
+| Datadog monitors and log index | none | `datadog/` templates applied by `dd-apply.py` (run by `up.sh`): the ad latency monitors, the RUM application, and a log index for the env ahead of `main` | the setup is rebuilt from git in any env or org; `${ENV_NAME}` is filled in per env |
 
 Known issues not fixed: the quote service's (PHP) spans start about 154 s
 before their shipping parent in Rancher Desktop, which stretches checkout
@@ -51,7 +54,7 @@ branch with the kube-stack installer (`KUBE_STACK_DIR` overrides the path).
 
 ```bash
 datadog/local/up.sh local   # Rancher Desktop: about 12 GB for the VM
-datadog/local/up.sh gke     # GKE otel-demo-blog in dd-dev-otelpmdev, created if missing
+datadog/local/up.sh gke     # GKE otel-demo in dd-dev-otelpmdev, created if missing
 ```
 
 Then port-forward `svc/frontend-proxy` 8080 (up.sh prints the command):
@@ -59,10 +62,10 @@ Then port-forward `svc/frontend-proxy` 8080 (up.sh prints the command):
 - Shop: http://localhost:8080, flags at http://localhost:8080/feature
 - Jaeger: http://localhost:8080/jaeger/ui
 - Grafana: http://localhost:8080/grafana
-- Datadog: APM, `env:otel-demo-local` or `env:otel-demo-gke-blog`
+- Datadog: APM, `env:otel-demo-local` or `env:otel-demo`
 
 Delete the GKE cluster when done:
-`gcloud container clusters delete otel-demo-blog --project dd-dev-otelpmdev --zone us-east1-b`
+`gcloud container clusters delete otel-demo --project dd-dev-otelpmdev --zone us-east1-b`
 
 ## Files
 
@@ -76,8 +79,8 @@ Delete the GKE cluster when done:
 - `datadog/`: monitor and log index definitions, templated on `${ENV_NAME}`.
 - `dd-apply.py`: creates or updates them (monitors matched by name, tagged
   `managed_by:otel-demo-local`). Needs `DD_APP_KEY` (`DD_APP_KEY_REF`, default
-  `op://Employee/ddot-lab/DD_APP_KEY`) with monitors and log index read/write
-  permissions; skips with a warning otherwise.
+  `op://Employee/ddot-lab/matt-dog-dd-app-key`) with write access; each object
+  that is refused is skipped with a warning.
 - `up.sh`: runs the installer and the demo chart against a kubeconfig holding
   only the target cluster, then sets the failure flags.
 
@@ -103,6 +106,6 @@ Delete the GKE cluster when done:
   checkout), `productCatalogFailure` for product OLJCESPC7Z (Go; the shipped
   rule returned "off" on both branches). `adFailure` is left off: the ad service
   records no exception type or stack, so Datadog shows "Missing error message".
-- ddstaging logs (now handled by `datadog/log-index.json`): app logs fall through to the `main` index, whose "Reduce
+- ddstaging logs (handled by `datadog/log-index.json`): app logs fall through to the `main` index, whose "Reduce
   volume" exclusion drops 99.99%, so they don't link to traces until an index
-  ahead of `main` matches this env.
+  ahead of `main` matches this env. The matt-dog org has no such exclusion.
