@@ -127,6 +127,34 @@ def apply_retention(rf):
         print(f"retention filter created: {rf['name']} ({status})")
 
 
+def apply_workflow(path, env):
+    """Create or update the remediation workflow (matched by name) and publish it. Its
+    Kubernetes and HTTP steps run on the private action runner, through the connections
+    named "<env> kubernetes" and "<env> flagd" (up.sh creates them). Uses
+    safe_substitute because the workflow's JavaScript uses $ itself."""
+    _, conns = call("GET", "/api/v2/actions/connections")
+    by_name = {c["attributes"]["name"]: c["id"] for c in (conns or {}).get("data", [])}
+    need = {"K8S_CONNECTION_ID": f"{env} kubernetes", "FLAGD_CONNECTION_ID": f"{env} flagd"}
+    missing = [n for n in need.values() if n not in by_name]
+    if missing:
+        print(f"workflow skipped: no connection named {', '.join(missing)}")
+        return
+    values = {k: by_name[v] for k, v in need.items()}
+    values.update(ENV_NAME=env)
+    wf = json.loads(string.Template(path.read_text()).safe_substitute(values))
+    attrs = {"name": wf["name"], "description": wf["description"], "spec": wf["spec"],
+             "published": True, "tags": [f"env:{env}", "service:ad", TAG]}
+    _, found = call("GET", "/api/v2/workflows?" + urllib.parse.urlencode({"filter[query]": wf["name"]}))
+    same = [w for w in (found or {}).get("data", []) if w["attributes"]["name"] == wf["name"]]
+    if same:
+        status, _ = call("PATCH", f"/api/v2/workflows/{same[0]['id']}",
+                         {"data": {"type": "workflows", "id": same[0]["id"], "attributes": attrs}})
+        print(f"workflow updated: {wf['name']} ({same[0]['id']}, {status})")
+    else:
+        status, made = call("POST", "/api/v2/workflows", {"data": {"type": "workflows", "attributes": attrs}})
+        print(f"workflow created: {wf['name']} ({(made or {}).get('data', {}).get('id')}, {status})")
+
+
 def main():
     env = os.environ["ENV_NAME"]
     if not os.environ.get("DD_APP_KEY"):
@@ -135,7 +163,8 @@ def main():
     # Each step stands alone, so a key refused for one (say, log indexes) still applies the rest.
     steps = [("log index", lambda: apply_index(load(HERE / "log-index.json", env))),
              ("RUM application", lambda: apply_rum(load(HERE / "rum-application.json", env), os.environ.get("RUM_OUT"))),
-             ("retention filter", lambda: apply_retention(load(HERE / "retention-filter.json", env)))]
+             ("retention filter", lambda: apply_retention(load(HERE / "retention-filter.json", env))),
+             ("workflow", lambda: apply_workflow(HERE / "workflow-remediate-ad.json", env))]
     steps += [(f"monitor {f.name}", lambda f=f: apply_monitor(load(f, env)))
               for f in sorted((HERE / "monitors").glob("*.json"))]
     for name, step in steps:

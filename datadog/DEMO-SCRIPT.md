@@ -23,8 +23,17 @@ any route that has moved. Rows marked "check once" were not visible to the API a
 | 5 min before | Open the monitor link below; it should be in Alert |
 | After | `datadog/local/stage.sh stop` (between :30 and :45 UTC the schedule keeps the problem on) |
 
+Step 1 rehearsed 2026-10-22: monitor OK, `stage.sh start` at 20:50:24, Alert at +3.5 min, held
+10 min with no flap, clean stop.
+
 No cue needed between :30 and :45 past each hour, UTC: the schedule runs the same
-problem then. Shop UI, if you want it: `kubectl -n otel-demo port-forward svc/frontend-proxy 8080:8080`,
+problem then. Shop UI, if you want it (a separate kubeconfig, so your current kubectl context is untouched):
+
+```bash
+KUBECONFIG=/tmp/otel-demo.kubeconfig gcloud container clusters get-credentials otel-demo --project dd-dev-otelpmdev --zone us-east1-b
+KUBECONFIG=/tmp/otel-demo.kubeconfig kubectl -n otel-demo port-forward svc/frontend-proxy 8080:8080
+```
+
 then http://localhost:8080 (Jaeger at /jaeger/ui, flags at /feature).
 
 ## Act 1: an investigation on upstream OpenTelemetry (slide 9)

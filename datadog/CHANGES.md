@@ -22,10 +22,21 @@ into git or undone.
 
 | Date | Where | Change | Why | Status |
 |---|---|---|---|---|
+| 2026-10-22 | GKE `otel-demo`, Helm release `par`; matt-dog connections | Private Action Runner enrolled by a one-off Job and installed with `local/par-values.yaml`; two connections created through the API | Act 3's workflow needs a runner in the cluster | Move into `up.sh` (enroll if missing, create connections) |
 | 2026-10-22 | matt-dog org settings, Preferences (UI) | OTel Semantic Query Mode on | queries match OTel and Datadog metric names | on; an org setting, no API found to set it from git |
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-10-22 · Act 3 (auto-remediation) built, not yet run end to end; step 1 rehearsed
+- **What:** `local/datadog/workflow-remediate-ad.json` (published by `dd-apply.py`, which resolves
+  the runner connections by name), `local/par-values.yaml`, the monitor's `@workflow` mention on
+  Alert, `stage.sh stop` restoring ad's 300m limit, `stage.sh status` showing it. The latency
+  monitor now evaluates per-minute p95 (`rollup(avg, 60)`), no warning band.
+- **Why:** Matthew asked for a workflow that relieves the symptom (CPU limit) and then applies the
+  real fix (flag rollback). The workflow acts only when `stage.sh` has paused the schedule, so the
+  hourly windows don't fight it. Lifting the limit, not raising it: see DEMO-PLAN.md, Act 3.
+- **Verified:** step 1 on cue (Alert at +3.5 min, held 10 min). Not verified: the workflow run.
 
 ### 2026-10-22 · Demo plan built: OTel names on metrics, DDOT SDK on fraud-detection, contrib Collector, stage cue
 - **What:**

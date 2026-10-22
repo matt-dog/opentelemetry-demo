@@ -68,6 +68,43 @@ Semantic conventions throughout: filter by `service.name`, `deployment.environme
 6. `DEMO-SCRIPT.md`: the walkthrough with direct links for each step.
 7. Later: the anomaly monitor once it has history (about a day); a presenter dashboard.
 
+## Act 3: auto-remediation (approved 2026-10-22)
+
+The monitor that opens Act 1 also starts a Datadog workflow that fixes the problem twice:
+first the symptom, then the cause.
+
+1. **Raise ad's CPU limit** (Kubernetes patch on the `ad` deployment): latency recovers in
+   about a minute, but the load threads are still running.
+2. **Roll back the change behind the alert**: `adHighCpu` back to off through flagd-ui's
+   API, the same change the event on the monitor names. That is the real fix.
+3. Post a change event for each action, so the service page shows what the workflow did.
+
+How it is built:
+- A standalone **Private Action Runner** in the cluster (Helm chart
+  `datadog/private-action-runner`), enrolled with the API and app keys from a one-off Job.
+  It only connects out to Datadog. It is a Datadog component (not the Agent), so it is
+  presented as optional, like the Agent on slide 20.
+- The workflow is defined in git (`local/datadog/workflow-remediate-ad.json`) and applied by
+  `dd-apply.py`; the monitor's message mentions it.
+- **Stage mode only.** The hourly schedule fires the same monitor, and a remediation then
+  would fight the schedule (it turns the flag back on within 30 s). The workflow's first step
+  reads the scenarios deployment: paused (`stage.sh start`) means act, running means stop.
+- `stage.sh stop` puts ad's CPU limit back to 300m, so a live patch never drifts from git.
+- The CPU step **removes** the limit (keeping a 300m request) rather than raising it. Measured
+  2026-10-22: at a 2-core limit p95 was still 18 to 46 ms with the pod using 1.8 cores (the four
+  load threads take any ceiling), and a 6-core limit could not schedule, because without an
+  explicit request Kubernetes sets the request equal to the limit.
+
+Status 2026-10-22, paused at Matthew's request:
+- Done: runner `otel-demo` installed (Helm release `par` in `otel-demo`, `local/par-values.yaml`);
+  connections `otel-demo kubernetes` and `otel-demo flagd`; workflow published from git
+  (`workflow-remediate-ad.json`, applied by `dd-apply.py`); the monitor mentions it on Alert.
+- Not done: one end-to-end run (cue, Alert, workflow, recovery, rollback, events); `up.sh`
+  does not yet enroll and install the runner or create the connections (done by hand once,
+  see CHANGES.md); the runner identity lives only in that Helm release, so a new cluster needs a
+  new enrollment and connections.
+
+
 ## Known limits
 
 - The collector images are dev builds pinned by the kube-stack ddot flow, not released
@@ -78,3 +115,7 @@ Semantic conventions throughout: filter by `service.name`, `deployment.environme
   list shows each node a second time with only `otel` on it, and Fleet Automation uses that name.
 - The DDOT SDK's own logs still don't reach Datadog (why `ad` stays upstream).
 - No Datadog OTel dashboard for Redis yet (slide 26 roadmap); its metrics arrive.
+- Session Replay: no session has a replay. The Browser SDK (7.16.1, CDN) logs "Recorder failed to
+  start ... Failed to resolve module specifier './chunks/datadogRecorder-...'", also on a bare
+  test page, in the shopper's headless Chromium 129. Not yet checked in a regular Chrome; if it
+  works there, only synthetic sessions are affected.

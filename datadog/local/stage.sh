@@ -2,7 +2,7 @@
 # Start and stop the demo's problem on cue, for a live presentation (DEMO-SCRIPT.md).
 #
 #   datadog/local/stage.sh start [gke|local]   pause the schedule, turn adHighCpu on
-#   datadog/local/stage.sh stop  [gke|local]   turn it off, hand back to the schedule
+#   datadog/local/stage.sh stop  [gke|local]   turn it off, hand back to the schedule, ad CPU limit to 300m
 #   datadog/local/stage.sh status [gke|local]  the flag, and whether the schedule runs
 #
 # The scenarios pod (scenarios.yaml) holds adHighCpu to :30 to :45 each hour and
@@ -93,8 +93,16 @@ case "$ACTION" in
     set_flag off
     change_event "$old" off
     kubectl -n "$NS" scale deploy/scenarios --replicas=1 >/dev/null
+    # The remediation workflow (Act 3) may have lifted ad's CPU limit; put back git's
+    # shape (a 300m limit, no request).
+    lim="$(kubectl -n "$NS" get deploy ad -o jsonpath='{.spec.template.spec.containers[0].resources.limits.cpu}')"
+    if [ "$lim" != "300m" ]; then
+      kubectl -n "$NS" patch deploy ad --type strategic \
+        -p '{"spec":{"template":{"spec":{"containers":[{"name":"ad","resources":{"limits":{"cpu":"300m"},"requests":null}}]}}}}' >/dev/null
+      echo "ad CPU limit back to 300m (was ${lim:-none})."
+    fi
     echo "$FLAG off, schedule back (it turns $FLAG on again from :30 to :45 each hour, UTC)." ;;
   status)
-    echo "$FLAG: $(current); schedule replicas: $(schedule)" ;;
+    echo "$FLAG: $(current); schedule replicas: $(schedule); ad CPU limit: $(kubectl -n "$NS" get deploy ad -o jsonpath='{.spec.template.spec.containers[0].resources.limits.cpu}')" ;;
   *) echo "usage: stage.sh start|stop|status [gke|local]" >&2; exit 2 ;;
 esac
