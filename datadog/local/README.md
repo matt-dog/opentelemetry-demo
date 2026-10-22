@@ -36,6 +36,9 @@ and images with overrides:
 | Feature flags (set by `up.sh`, live in flagd) | all off | paymentFailure 50%, cartFailure 100%, productCatalogFailure on for OLJCESPC7Z | error traces; the shipped productCatalogFailure rule returns "off" on both branches |
 | Host Profiler | none | kube-stack `host-profiler` DaemonSet (DDOT preview image), on by default for `up.sh gke` (`DD_HOST_PROFILER_ENABLED`) | profiles from the same cluster |
 | `shopper` (new pod) | none | headless Chromium placing an order every 20 s | checkout traces that start at the browser click (`frontend-web`) |
+| `contrib` Collector (new) | none | upstream collector-contrib 0.161.0 (`contrib-collector.yaml`): `postgresql`, `redis`, `kafka_metrics` receivers | integration dashboards; the DDOT Collector does not ship those receivers; an upstream row next to DDOT in Fleet Automation |
+| fraud-detection SDK | upstream OTel Java agent | the DDOT SDK (Java 1.67-preview), swapped in by an init container (`values-local.yaml`) | Act 2: one Kafka trace across upstream SDKs and the DDOT SDK; `ad` stays upstream for Act 1's trace-to-logs |
+| Metric tags | Datadog names only (`pod_name`, `kube_cluster_name`) | OTel names too (`metrics.resource_attributes_as_tags`) | filter metrics by `k8s.cluster.name` and the rest |
 | `scenarios` (new pod) | flags changed by hand | holds flags to a schedule in `scenarios.yaml`: `adHighCpu` on from :30 to :45 each hour, UTC | a problem at known times with a quiet baseline between, for anomaly monitors and screenshots |
 | ad CPU limit | none | 300m | adHighCpu throttles the JVM, so GetAds slows; with no limit its load threads take spare cores and requests stay at a few ms |
 | agent LLM | recorded responses for three prompts | Claude Haiku 5.5 through LangChain's Anthropic client (`llm.py` replaced from a ConfigMap) | real tokens and cost in Agent Observability |
@@ -49,7 +52,8 @@ stack.
 
 ## Run it
 
-Needs `op` and `gcloud` signed in, and Helm. The kube-stack installer is copied
+Needs `gcloud` signed in, Helm, and the keys: `op` signed in, or `DD_API_KEY`, `DD_APP_KEY` and
+`ANTHROPIC_API_KEY` set in the environment (read once each). The kube-stack installer is copied
 into `kube-stack/` (`KUBE_STACK_DIR` overrides the path).
 
 ```bash
@@ -83,6 +87,8 @@ Delete the GKE cluster when done:
   that is refused is skipped with a warning.
 - `kube-stack/`: the kube-stack installer, copied from opentelemetry-examples
   (where from, and why, in its README).
+- `contrib-collector.yaml`: the upstream Collector for PostgreSQL, Redis and Kafka metrics; `up.sh` applies it.
+- `stage.sh`: starts and stops the Act 1 problem on cue (`start`, `stop`, `status`).
 - `up.sh`: runs the installer and the demo chart against a kubeconfig holding
   only the target cluster, then sets the failure flags.
 

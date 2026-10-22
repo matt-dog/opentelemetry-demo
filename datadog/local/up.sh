@@ -50,8 +50,13 @@ case "$TARGET" in
   *) echo "usage: up.sh [local|gke]" >&2; exit 2 ;;
 esac
 
+# ---- keys: from the environment when set (CI, handover), else 1Password, read once --
+DD_API_KEY="${DD_API_KEY:-$(op read "$DD_API_KEY_REF")}"
+DD_APP_KEY="${DD_APP_KEY:-$(op read "$DD_APP_KEY_REF" 2>/dev/null || true)}"
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-$(op read "$ANTHROPIC_API_KEY_REF")}"
+
 # ---- the API key must belong to DD_SITE; a key from another site is dropped silently --
-res="$(curl -s "https://api.$DD_SITE/api/v1/validate" -H "DD-API-KEY: $(op read "$DD_API_KEY_REF")")"
+res="$(curl -s "https://api.$DD_SITE/api/v1/validate" -H "DD-API-KEY: $DD_API_KEY")"
 [ "$res" = '{"valid":true}' ] || { echo "DD_API_KEY ($DD_API_KEY_REF) is not valid on $DD_SITE: $res" >&2; exit 1; }
 
 # ---- kube-stack: OTel Operator + DDOT collectors, via its own installer ----------
@@ -59,7 +64,7 @@ res="$(curl -s "https://api.$DD_SITE/api/v1/validate" -H "DD-API-KEY: $(op read 
 kube_stack_values="$(mktemp)"
 sed "s/__ENV_NAME__/$ENV_NAME/g" "$HERE/kube-stack-values.yaml" >"$kube_stack_values"
 echo "Installing kube-stack (ddot flow, host profiler $HOST_PROFILER) with the shop overlay"
-DD_API_KEY="$(op read "$DD_API_KEY_REF")" DD_SITE="$DD_SITE" \
+DD_API_KEY="$DD_API_KEY" DD_SITE="$DD_SITE" \
   DD_INSTALL_FLOW=ddot DD_AGENT_ENABLED=false DD_HOST_PROFILER_ENABLED="$HOST_PROFILER" \
   K8S_CLUSTER_NAME="$ENV_NAME" K8S_CLUSTER_TYPE="$CLUSTER_TYPE" \
   DEPLOYMENT_ENVIRONMENT_NAME="$ENV_NAME" \
@@ -70,7 +75,7 @@ DD_API_KEY="$(op read "$DD_API_KEY_REF")" DD_SITE="$DD_SITE" \
 # rum-config secret (application id and client token) exists when Envoy starts.
 # Skips with a warning when the application key is missing or refused.
 rum_out="$(mktemp)"; chmod 600 "$rum_out"
-DD_API_KEY="$(op read "$DD_API_KEY_REF")" DD_APP_KEY="$(op read "$DD_APP_KEY_REF" 2>/dev/null || true)" \
+DD_API_KEY="$DD_API_KEY" DD_APP_KEY="$DD_APP_KEY" \
   DD_SITE="$DD_SITE" ENV_NAME="$ENV_NAME" RUM_OUT="$rum_out" python3 "$HERE/dd-apply.py" \
   || echo "dd-apply.py failed; the demo is up without its monitors, log index and RUM" >&2
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -95,7 +100,7 @@ kubectl -n "$NS" create configmap load-generator-locustfile \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 # The shop's AI agent runs on Claude (values-local.yaml); its key, from 1Password.
 kubectl -n "$NS" create secret generic agent-llm \
-  --from-literal=ANTHROPIC_API_KEY="$(op read "$ANTHROPIC_API_KEY_REF")" \
+  --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
   --version "$DEMO_CHART_VERSION" --namespace "$NS" \
@@ -105,9 +110,12 @@ kubectl apply -f "$HERE/shopper.yaml" >/dev/null
 # The scenarios pod posts a Datadog change event at every flag flip.
 kubectl -n "$NS" create configmap scenarios-env --from-literal=DD_ENV="$ENV_NAME" --from-literal=DD_SITE="$DD_SITE" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-kubectl -n "$NS" create secret generic scenarios-dd --from-literal=DD_API_KEY="$(op read "$DD_API_KEY_REF")" \
+kubectl -n "$NS" create secret generic scenarios-dd --from-literal=DD_API_KEY="$DD_API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl apply -f "$HERE/scenarios.yaml" >/dev/null
+# The upstream contrib Collector for the integration dashboards (PostgreSQL, Redis,
+# Kafka), beside the DDOT ones; it reads the scenarios-dd key and scenarios-env site.
+sed "s/__ENV_NAME__/$ENV_NAME/g" "$HERE/contrib-collector.yaml" | kubectl apply -f - >/dev/null
 
 echo "Waiting for every pod to be Ready (up to 10 minutes)"
 kubectl -n "$NS" wait --for=condition=Ready pods --all --timeout=600s >/dev/null \

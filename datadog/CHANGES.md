@@ -27,6 +27,34 @@ into git or undone.
 
 ## Log
 
+### 2026-10-22 · Demo plan built: OTel names on metrics, DDOT SDK on fraud-detection, contrib Collector, stage cue
+- **What:**
+  - `DEMO-PLAN.md` (replaces `TOUR-PLAN.md`) and `DEMO-SCRIPT.md`, the presenter's walkthrough with links.
+  - `kube-stack-values.yaml`: `metrics.resource_attributes_as_tags` on every collector's Datadog exporter.
+  - `values-local.yaml`: fraud-detection runs the DDOT SDK (the swap already tried on `ad`).
+  - `contrib-collector.yaml`: an upstream collector-contrib 0.161.0, Operator-managed, with the
+    `postgresql`, `redis` and `kafka_metrics` receivers and the datadog extension.
+  - `stage.sh`: start and stop `adHighCpu` on cue, with its change event, pausing the schedule.
+  - `dd-apply.py`: an APM retention filter (`retention-filter.json`, `env:<env>` at 100%); monitors
+    saved only when their definition changed. `ad-latency-threshold.json` now alerts at 20 ms.
+  - `up.sh`: keys from the environment when set, else 1Password, read once each.
+- **Why:**
+  - Metric queries by OTel attribute names (`k8s.cluster.name`) found nothing: the exporter keeps
+    only the Datadog names (`kube_cluster_name`) by default. That was the `N/A` cluster tag.
+  - The DDOT Collector ships no PostgreSQL, Redis or Kafka metrics receivers (checked in the binary).
+  - The org's default trace retention kept only a sample, so the slow GetAds traces were not
+    searchable after 15 minutes.
+  - The 50 ms monitor stayed OK through 25 minutes at about 100 ms p95. Every `dd-apply.py` run
+    re-saved it, which restarts evaluation; and its warning band hid it. The 20 ms monitor alerted
+    about a minute after creation.
+  - 1Password prompts timed out mid-run.
+- **Verified (API):** p95 3 to 6 ms baseline, about 100 ms within 2 minutes of `stage.sh start`; the
+  slow trace's 4 logs by trace ID including "High CPU-Load problempattern enabled"; ad container at
+  0.298 of a 0.3 CPU limit by OTel names; Host Profiler profiles for ad, PostgreSQL, Kafka, Envoy; a
+  44-span checkout trace across 11 services, fraud-detection on the DDOT SDK, the same in Jaeger;
+  PostgreSQL, Redis and Kafka metrics with OTel tags; RUM sessions. Not checked through the API:
+  dashboards lighting up, the contrib row in Fleet Automation, the profile's function view.
+
 ### 2026-10-22 · kube-stack installer copied into the repo; old branch deleted
 - **What:** the kube-stack installer `up.sh` runs is now `local/kube-stack/` (copied unchanged from
   DataDog/opentelemetry-examples at 4e131eb, the abandoned local branch

@@ -1,0 +1,7 @@
+{
+  "name": "otel demo: every span (${ENV_NAME})",
+  "filter": {"query": "env:${ENV_NAME}"},
+  "enabled": true,
+  "rate": 1.0,
+  "filter_type": "spans-sampling-processor"
+}

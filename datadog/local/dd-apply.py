@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Apply the Datadog objects in datadog/ (monitors, log index, RUM application) for one demo env.
+"""Apply the Datadog objects in datadog/ (monitors, log index, RUM application, APM
+retention filter) for one demo env.
 
   DD_API_KEY=... DD_APP_KEY=... ENV_NAME=otel-demo datadog/local/dd-apply.py
 
@@ -57,8 +58,16 @@ def apply_monitor(m):
     _, found = call("GET", "/api/v1/monitor?" + urllib.parse.urlencode({"name": m["name"]}))
     same = [x for x in found or [] if x["name"] == m["name"]]
     if same:
-        call("PUT", f"/api/v1/monitor/{same[0]['id']}", m)
-        print(f"monitor updated: {m['name']} ({same[0]['id']})")
+        # Save only a real change: every save restarts the monitor's evaluation, which
+        # kept it OK through a problem when up.sh ran during the problem window.
+        have = same[0]
+        if (have["query"] == m["query"] and have.get("message") == m.get("message")
+                and sorted(have.get("tags", [])) == m["tags"]
+                and all(have.get("options", {}).get(k) == v for k, v in m.get("options", {}).items())):
+            print(f"monitor unchanged: {m['name']} ({have['id']})")
+            return
+        call("PUT", f"/api/v1/monitor/{have['id']}", m)
+        print(f"monitor updated: {m['name']} ({have['id']})")
     else:
         _, made = call("POST", "/api/v1/monitor", m)
         print(f"monitor created: {m['name']} ({made['id']})")
@@ -102,6 +111,22 @@ def apply_rum(app, out):
         os.chmod(out, 0o600)
 
 
+def apply_retention(rf):
+    """Create or update the APM retention filter, matched by name, so every span in the
+    env stays searchable after Live Search's 15 minutes (the org's default retention
+    keeps only a sample, which can miss the slow trace the demo opens)."""
+    _, found = call("GET", "/api/v2/apm/config/retention-filters")
+    same = [f for f in (found or {}).get("data", []) if f["attributes"]["name"] == rf["name"]]
+    body = {"data": {"type": "apm_retention_filter", "attributes": rf}}
+    if same:
+        body["data"]["id"] = same[0]["id"]
+        call("PUT", f"/api/v2/apm/config/retention-filters/{same[0]['id']}", body)
+        print(f"retention filter updated: {rf['name']}")
+    else:
+        status, _ = call("POST", "/api/v2/apm/config/retention-filters", body)
+        print(f"retention filter created: {rf['name']} ({status})")
+
+
 def main():
     env = os.environ["ENV_NAME"]
     if not os.environ.get("DD_APP_KEY"):
@@ -109,7 +134,8 @@ def main():
         return
     # Each step stands alone, so a key refused for one (say, log indexes) still applies the rest.
     steps = [("log index", lambda: apply_index(load(HERE / "log-index.json", env))),
-             ("RUM application", lambda: apply_rum(load(HERE / "rum-application.json", env), os.environ.get("RUM_OUT")))]
+             ("RUM application", lambda: apply_rum(load(HERE / "rum-application.json", env), os.environ.get("RUM_OUT"))),
+             ("retention filter", lambda: apply_retention(load(HERE / "retention-filter.json", env)))]
     steps += [(f"monitor {f.name}", lambda f=f: apply_monitor(load(f, env)))
               for f in sorted((HERE / "monitors").glob("*.json"))]
     for name, step in steps:

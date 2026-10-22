@@ -16,6 +16,17 @@
 # k8s_attributes and appends resource/global to each pipeline, so the lists below
 # leave those out. __ENV_NAME__ is filled in by up.sh. See
 # https://docs.datadoghq.com/opentelemetry/mapping/hostname/
+# OpenTelemetry attribute names on metrics, for every collector: the Datadog
+# exporter maps resource attributes to Datadog tags (k8s.pod.name to pod_name,
+# k8s.cluster.name to kube_cluster_name) and, by default, keeps only those, so a
+# metric query by k8s.cluster.name found nothing. With this it keeps both.
+defaultCRConfig:
+  config:
+    exporters:
+      datadog/exporter:
+        metrics:
+          resource_attributes_as_tags: true
+
 collectors:
   daemon:
     config:

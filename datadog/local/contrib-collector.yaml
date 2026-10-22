@@ -1,0 +1,72 @@
+# An upstream OpenTelemetry Collector (collector-contrib) next to the DDOT ones,
+# managed by the same OpenTelemetry Operator. It scrapes the shop's PostgreSQL,
+# Valkey (Redis protocol) and Kafka for Datadog's integration dashboards: the DDOT
+# Collector does not ship the postgresql, redis or kafkametrics receivers. It also
+# puts an upstream Collector in Fleet Automation beside DDOT (the datadog
+# extension) and shows a mixed pipeline. See DEMO-PLAN.md. up.sh applies it, after
+# filling in __ENV_NAME__. It runs in the shop's namespace because Kafka advertises
+# its short service name; the API key and site are the ones up.sh gives the scenarios pod.
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: contrib
+  namespace: otel-demo
+spec:
+  mode: deployment
+  replicas: 1
+  image: otel/opentelemetry-collector-contrib:0.161.0
+  env:
+    - name: DD_API_KEY
+      valueFrom: {secretKeyRef: {name: scenarios-dd, key: DD_API_KEY}}
+    - name: DD_SITE
+      valueFrom: {configMapKeyRef: {name: scenarios-env, key: DD_SITE}}
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+  config:
+    receivers:
+      postgresql:
+        endpoint: astronomy-db:5432
+        transport: tcp
+        # The demo chart's own default credentials (POSTGRES_PASSWORD on astronomy-db).
+        username: postgres
+        password: changeit
+        collection_interval: 30s
+        tls:
+          insecure: true
+      redis:
+        endpoint: valkey-cart:6379
+        collection_interval: 30s
+      kafka_metrics:
+        brokers: [kafka:9092]
+        protocol_version: 3.9.0
+        scrapers: [brokers, topics, consumers]
+        collection_interval: 30s
+    processors:
+      batch: {}
+      resource:
+        attributes:
+          - {key: deployment.environment.name, value: __ENV_NAME__, action: upsert}
+          - {key: k8s.cluster.name, value: __ENV_NAME__, action: upsert}
+    exporters:
+      datadog:
+        api:
+          key: ${env:DD_API_KEY}
+          site: ${env:DD_SITE}
+        metrics:
+          resource_attributes_as_tags: true
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      datadog:
+        api:
+          key: ${env:DD_API_KEY}
+          site: ${env:DD_SITE}
+        deployment_type: gateway
+    service:
+      extensions: [health_check, datadog]
+      pipelines:
+        metrics:
+          receivers: [postgresql, redis, kafka_metrics]
+          processors: [resource, batch]
+          exporters: [datadog]
