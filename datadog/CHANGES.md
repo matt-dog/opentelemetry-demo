@@ -45,14 +45,18 @@ into git or undone.
   - The org's default trace retention kept only a sample, so the slow GetAds traces were not
     searchable after 15 minutes.
   - The 50 ms monitor stayed OK through 25 minutes at about 100 ms p95. Every `dd-apply.py` run
-    re-saved it, which restarts evaluation; and its warning band hid it. The 20 ms monitor alerted
-    about a minute after creation.
+    re-saved it, which restarts evaluation. A rehearsal then showed the real cause: the monitor took
+    p95 over buckets holding only a few ad requests and averaged them, well below the per-minute p95
+    the graphs show, so it sat in Warn or flapped. It now evaluates `p95:...rollup(avg, 60)` over 3
+    minutes, critical at 20 ms, no warning band.
   - 1Password prompts timed out mid-run.
 - **Verified (API):** p95 3 to 6 ms baseline, about 100 ms within 2 minutes of `stage.sh start`; the
   slow trace's 4 logs by trace ID including "High CPU-Load problempattern enabled"; ad container at
   0.298 of a 0.3 CPU limit by OTel names; Host Profiler profiles for ad, PostgreSQL, Kafka, Envoy; a
   44-span checkout trace across 11 services, fraud-detection on the DDOT SDK, the same in Jaeger;
-  PostgreSQL, Redis and Kafka metrics with OTel tags; RUM sessions. Not checked through the API:
+  PostgreSQL, Redis and Kafka metrics with OTel tags; RUM sessions. The contrib Collector sets
+  `datadog.host.name` from its node, like the DDOT ones; without it its metrics landed on a
+  duplicate `<node>.dd-dev-otelpmdev` host. Not checked through the API:
   dashboards lighting up, the contrib row in Fleet Automation, the profile's function view.
 
 ### 2026-10-22 · kube-stack installer copied into the repo; old branch deleted

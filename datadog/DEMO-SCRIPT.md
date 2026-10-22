@@ -9,8 +9,10 @@ runs anywhere in the cluster: the shop's services use upstream OpenTelemetry SDK
 (fraud-detection uses the DDOT SDK), the collectors are the DDOT Collector plus one
 upstream contrib Collector, and profiles come from the DDOT Host Profiler.
 
-Verified on 2026-10-22 through the Datadog API (numbers below are from that run). Rows
-marked "check once" were not visible to the API; look at them in the UI before presenting.
+Verified on 2026-10-22 through the Datadog API (numbers below are from that run): the data
+behind every link is there. The links themselves were built from those queries but not
+yet opened in a browser, so click through each once before the first presentation and fix
+any route that has moved. Rows marked "check once" were not visible to the API at all.
 
 ## Before you start
 
@@ -31,14 +33,15 @@ Say up front: everything in this act comes from the OpenTelemetry SDKs the demo
 ships with, through OTLP, with no Datadog Agent.
 
 **1. The alert.** [link](https://app.datad0g.com/monitors/35243022)
-- The ad service's p95 latency is over 20 ms; its baseline is 3 to 6 ms.
+- The ad service's per-minute p95 latency is over 20 ms; its baseline is 3 to 6 ms, and
+  the problem takes it to 35 to 130 ms.
 - The change event "adHighCpu on (ad)" sits on the monitor's graph: a feature-flag
   flip, posted by the stage script. All events for the service: [link](https://app.datad0g.com/event/explorer?query=service%3Aad%20env%3Aotel-demo)
 - The anomaly monitor ([link](https://app.datad0g.com/monitors/35241062)) is the slide's story. It needs about a day of
   history before its baseline is trustworthy; until then lead with the threshold one.
 
 **2. The service page.** [link](https://app.datad0g.com/apm/services/ad/operations/grpc.server.request/resources?env=otel-demo)
-- p95 on GetAds goes from about 3 ms to about 100 ms at the flag flip. The marker
+- p95 on GetAds goes from about 3 ms to 35 to 130 ms at the flag flip. The marker
   on the graph is the same change event.
 
 **3. The slow trace, searched with OpenTelemetry names.** [link](https://app.datad0g.com/apm/traces?query=service.name%3Aad%20deployment.environment.name%3Aotel-demo%20resource_name%3A%22GetAds%20oteldemo.AdService%22%20%40duration%3A%3E50ms)

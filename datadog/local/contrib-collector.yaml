@@ -20,6 +20,8 @@ spec:
       valueFrom: {secretKeyRef: {name: scenarios-dd, key: DD_API_KEY}}
     - name: DD_SITE
       valueFrom: {configMapKeyRef: {name: scenarios-env, key: DD_SITE}}
+    - name: K8S_NODE_NAME
+      valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
   resources:
     requests: {cpu: 50m, memory: 128Mi}
     limits: {memory: 256Mi}
@@ -48,6 +50,9 @@ spec:
         attributes:
           - {key: deployment.environment.name, value: __ENV_NAME__, action: upsert}
           - {key: k8s.cluster.name, value: __ENV_NAME__, action: upsert}
+          # One host name per node, as in kube-stack-values.yaml: without it the exporter
+          # names the host <node>.<project> and the node shows up twice.
+          - {key: datadog.host.name, value: "${env:K8S_NODE_NAME}", action: upsert}
     exporters:
       datadog:
         api:

@@ -74,6 +74,7 @@ Semantic conventions throughout: filter by `service.name`, `deployment.environme
   DDOT versions; slide 24 names released tags.
 - The ad load threads are unnamed (`Thread-N`); naming them means changing upstream code.
 - No trace-to-profile link yet (Host Profiler preview).
-- Fleet Automation shows host names with the GCP project suffix (`<node>.dd-dev-otelpmdev`).
+- The DDOT exporters' own host metadata still reports `<node>.dd-dev-otelpmdev`, so the host
+  list shows each node a second time with only `otel` on it, and Fleet Automation uses that name.
 - The DDOT SDK's own logs still don't reach Datadog (why `ad` stays upstream).
 - No Datadog OTel dashboard for Redis yet (slide 26 roadmap); its metrics arrive.

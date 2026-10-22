@@ -1,12 +1,18 @@
 {
   "name": "[otel demo] ad service p95 latency high (${ENV_NAME})",
   "type": "query alert",
-  "query": "avg(last_2m):p95:trace.grpc.server.request{env:${ENV_NAME},service:ad} > 0.02",
-  "message": "p95 latency on the ad service is above 20 ms (baseline 3 to 6 ms; adHighCpu takes it to about 100 ms). The scenarios pod turns adHighCpu on from :30 to :45 each hour, UTC, and stage.sh turns it on for a live demo; this monitor stays in alert for the whole problem. Act 1, step 1 of DEMO-SCRIPT.md. No notification targets on purpose.",
-  "tags": ["env:${ENV_NAME}", "service:ad", "demo:act1"],
+  "query": "avg(last_3m):p95:trace.grpc.server.request{env:${ENV_NAME},service:ad}.rollup(avg, 60) > 0.02",
+  "message": "p95 latency on the ad service is above 20 ms (baseline 3 to 6 ms; adHighCpu takes it to 35 to 130 ms). Evaluated on per-minute p95, the value the graphs show: p95 over shorter buckets holds only a few ad requests and kept the monitor under its threshold and flapping. The scenarios pod turns adHighCpu on from :30 to :45 each hour, UTC, and stage.sh turns it on for a live demo. Act 1, step 1 of DEMO-SCRIPT.md. No notification targets on purpose.",
+  "tags": [
+    "env:${ENV_NAME}",
+    "service:ad",
+    "demo:act1"
+  ],
   "priority": 3,
   "options": {
-    "thresholds": {"critical": 0.02, "warning": 0.01},
+    "thresholds": {
+      "critical": 0.02
+    },
     "notify_no_data": false,
     "include_tags": true,
     "require_full_window": false
