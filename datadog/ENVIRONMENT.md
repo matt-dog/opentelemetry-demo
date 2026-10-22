@@ -41,8 +41,8 @@ in `CHANGES.md` when it is turned on.
 
 | Setting | Where | Status |
 |---|---|---|
-| OTel Semantic Query Mode | Organization Settings, Preferences | asked for 2026-10-22, not confirmed on |
-| `graphing_semantic_metric_names` (metrics features for OTel names) | Mosaic feature flag for the org | asked for 2026-10-22, not confirmed on |
+| OTel Semantic Query Mode | Organization Settings, Preferences | on since 2026-10-22 (Matthew) |
+| `graphing_semantic_metric_names` (metrics features for OTel names) | Mosaic feature flag for the org | not confirmed on |
 
 ## Kubernetes
 
@@ -62,7 +62,7 @@ were deleted that day.
 | Dependency | Where | Handover risk |
 |---|---|---|
 | Upstream demo Helm chart | `open-telemetry/opentelemetry-demo` 0.42.1 | none |
-| kube-stack installer (OTel Operator + DDOT collectors) | `DataDog/opentelemetry-examples`, branch `matthew-david/blog-jaeger-datadog` (4e131eb), path `guides/kubernetes/configuration/opentelemetry-kube-stack` | branch is local only, 3 commits ahead of main (optional Agent in the ddot flow, auto-instrumented namespaces, Jaeger alongside Datadog); push or merge before handover |
+| kube-stack installer (OTel Operator + DDOT collectors) | copied into `local/kube-stack/` from `DataDog/opentelemetry-examples` (abandoned local branch `matthew-david/blog-jaeger-datadog`, 4e131eb) | none; the copy is in this repo |
 | Collector image | the one the kube-stack ddot flow pins (a DDOT dev build) | not a released DDOT Collector |
 
 ## Tools on the machine that runs it

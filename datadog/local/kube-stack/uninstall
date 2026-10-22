@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cat <<'EOF'
+WARNING: This uninstall script is for development purposes only.
+
+It deletes:
+  - the cert-manager Helm release in the cert-manager namespace;
+  - cert-manager CRDs: issuers, clusterissuers, certificates,
+    certificaterequests, orders, and challenges;
+  - the opentelemetry-kube-stack Helm release in the
+    opentelemetry-operator-system namespace;
+  - the ddagent-kube-stack Helm release in the
+    opentelemetry-operator-system namespace (if installed);
+  - the host-profiler egress NetworkPolicy and CiliumNetworkPolicy in the
+    opentelemetry-operator-system namespace (if installed);
+  - the datadog-secret secret in the opentelemetry-operator-system namespace;
+  - namespace annotations that inject the
+    opentelemetry-operator-system/opentelemetry-kube-stack Instrumentation
+    (pods injected before the uninstall keep their instrumentation until
+    they restart);
+  - OpenTelemetry CRDs: opentelemetrycollectors, instrumentations, and
+    opampbridges;
+  - the cert-manager and opentelemetry-operator-system namespaces.
+
+Deleting CRDs also deletes all corresponding custom resources in the cluster.
+EOF
+
+read -r -p "Type 'yes' to continue with the uninstall: " confirmation
+if [[ "$confirmation" != "yes" ]]; then
+  echo "Uninstall cancelled."
+  exit 0
+fi
+
+helm uninstall cert-manager -n cert-manager \
+   || echo "WARNING: Could not uninstall cert-manager. Continuing..."
+
+kubectl delete crd \
+  issuers.cert-manager.io \
+  clusterissuers.cert-manager.io \
+  certificates.cert-manager.io \
+  certificaterequests.cert-manager.io \
+  orders.acme.cert-manager.io \
+  challenges.acme.cert-manager.io \
+|| echo "WARNING: Could not uninstall cert-manager CRDs. Continuing..."
+
+kubectl delete networkpolicy \
+  --namespace opentelemetry-operator-system \
+  --ignore-not-found=true \
+  opentelemetry-kube-stack-host-profiler-egress \
+  || echo "WARNING: Could not delete the host-profiler NetworkPolicy. Continuing..."
+kubectl delete ciliumnetworkpolicy \
+  --namespace opentelemetry-operator-system \
+  --ignore-not-found=true \
+  opentelemetry-kube-stack-host-profiler-egress \
+  || echo "WARNING: CiliumNetworkPolicy CRD not installed. Continuing..."
+
+echo "Removing auto-instrumentation namespace annotations..."
+# shellcheck disable=SC2016 # go-template, not shell expansion
+kubectl get namespaces -o go-template='{{range .items}}{{$ns := .metadata.name}}{{range $key, $value := .metadata.annotations}}{{if eq $value "opentelemetry-operator-system/opentelemetry-kube-stack"}}{{$ns}} {{$key}}{{"\n"}}{{end}}{{end}}{{end}}' \
+  | while read -r ns key; do
+      kubectl annotate namespace "$ns" "$key-" \
+        || echo "WARNING: Could not remove annotation '$key' from namespace '$ns'. Continuing..."
+    done \
+  || echo "WARNING: Could not list namespace annotations. Continuing..."
+
+helm uninstall opentelemetry-kube-stack \
+  --namespace opentelemetry-operator-system  \
+  || echo "WARNING: Could not uninstall opentelemetry-kube-stack. Continuing..."
+
+helm uninstall ddagent-kube-stack \
+  --namespace opentelemetry-operator-system  \
+  --ignore-not-found \
+  || echo "WARNING: Could not uninstall ddagent-kube-stack. Continuing..."
+
+echo "Removing Datadog endpoint configuration..."
+kubectl delete secrets --namespace opentelemetry-operator-system  --ignore-not-found=true datadog-secret
+
+
+# Remove OpenTelemetry CRDs (optional - be careful as this affects all OpenTelemetry resources)
+echo "Delete CRDs"
+kubectl delete crd  --namespace opentelemetry-operator-system opentelemetrycollectors.opentelemetry.io
+kubectl delete crd  --namespace opentelemetry-operator-system instrumentations.opentelemetry.io
+kubectl delete crd  --namespace opentelemetry-operator-system opampbridges.opentelemetry.io
+
+echo "Removing namespaces..."
+kubectl delete namespace --ignore-not-found=true opentelemetry-operator-system cert-manager

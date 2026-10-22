@@ -49,8 +49,8 @@ stack.
 
 ## Run it
 
-Needs `op` signed in, Helm, and `~/code/opentelemetry-examples` checked out on a
-branch with the kube-stack installer (`KUBE_STACK_DIR` overrides the path).
+Needs `op` and `gcloud` signed in, and Helm. The kube-stack installer is copied
+into `kube-stack/` (`KUBE_STACK_DIR` overrides the path).
 
 ```bash
 datadog/local/up.sh local   # Rancher Desktop: about 12 GB for the VM
@@ -81,6 +81,8 @@ Delete the GKE cluster when done:
   `managed_by:otel-demo-local`). Needs `DD_APP_KEY` (`DD_APP_KEY_REF`, default
   `op://Employee/ddot-lab/matt-dog-dd-app-key`) with write access; each object
   that is refused is skipped with a warning.
+- `kube-stack/`: the kube-stack installer, copied from opentelemetry-examples
+  (where from, and why, in its README).
 - `up.sh`: runs the installer and the demo chart against a kubeconfig holding
   only the target cluster, then sets the failure flags.
 

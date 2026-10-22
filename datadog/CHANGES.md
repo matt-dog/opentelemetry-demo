@@ -22,9 +22,19 @@ into git or undone.
 
 | Date | Where | Change | Why | Status |
 |---|---|---|---|---|
+| 2026-10-22 | matt-dog org settings, Preferences (UI) | OTel Semantic Query Mode on | queries match OTel and Datadog metric names | on; an org setting, no API found to set it from git |
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-10-22 · kube-stack installer copied into the repo; old branch deleted
+- **What:** the kube-stack installer `up.sh` runs is now `local/kube-stack/` (copied unchanged from
+  DataDog/opentelemetry-examples at 4e131eb, the abandoned local branch
+  `matthew-david/blog-jaeger-datadog`); `KUBE_STACK_DIR` defaults to it. The remote branch
+  `ddot-local-blog` was deleted; every commit on it is in `datadog-demo`.
+- **Why:** the demo depended on an unpushed branch on one laptop, so nobody else could run it.
+  The enrichment learned on the old branch (one host name per node, `datadog.host.name` from
+  `k8s.node.name`, Kubernetes tags on spans) is already in this branch's history and config.
 
 ### 2026-10-22 · Branch renamed `datadog-demo`; ENVIRONMENT.md for handover
 - **What:** branch `ddot-local-blog` renamed `datadog-demo`. New `ENVIRONMENT.md`: the Datadog

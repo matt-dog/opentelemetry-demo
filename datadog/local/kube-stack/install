@@ -1,0 +1,263 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Optional extra/overlay values.yaml merged on top of the base values file.
+OVERLAY_VALUES_FILE="${1:-}"
+OVERLAY_VALUES_ARGS=()
+if [[ -n "$OVERLAY_VALUES_FILE" ]]; then
+    [[ -f "$OVERLAY_VALUES_FILE" ]] || { echo "Overlay values file not found: $OVERLAY_VALUES_FILE" >&2; exit 1; }
+    OVERLAY_VALUES_ARGS=(-f "$OVERLAY_VALUES_FILE")
+fi
+
+if [[ -z "${DD_API_KEY:-}" ]]; then
+    echo "ERROR: DD_API_KEY is not set" >&2
+    exit 1
+fi
+
+case "${DD_INSTALL_FLOW:-}" in
+    upstream) VALUES_FILE=values-otlp-http.yaml ;;
+    ddot) VALUES_FILE=values-ddot.yaml ;;
+    *)
+        echo "ERROR: DD_INSTALL_FLOW must be one of: upstream, ddot (got '${DD_INSTALL_FLOW:-}')" >&2
+        exit 1
+        ;;
+esac
+
+DD_SITE=${DD_SITE:-datadoghq.com}
+K8S_CLUSTER_TYPE=${K8S_CLUSTER_TYPE:-other}
+DEPLOYMENT_ENVIRONMENT_NAME=${DEPLOYMENT_ENVIRONMENT_NAME:-production}
+
+case "$K8S_CLUSTER_TYPE" in
+    eks|gcp|aks|other) ;;
+    *)
+        echo "ERROR: K8S_CLUSTER_TYPE must be one of: eks, gcp, aks, other (got '$K8S_CLUSTER_TYPE')" >&2
+        exit 1
+        ;;
+esac
+
+# The eBPF host profiler needs Linux nodes with kernel >= 5.10 and runs one
+# collector per node with eBPF capabilities. Off by default because of these
+# extra privileges.
+DD_HOST_PROFILER_ENABLED=${DD_HOST_PROFILER_ENABLED:-false}
+DD_HOST_PROFILER_NETWORK_POLICY=${DD_HOST_PROFILER_NETWORK_POLICY:-none}
+HOST_PROFILER_NETWORK_POLICY_FILE=""
+HOST_PROFILER_ENABLED_ARGS=()
+
+case "$DD_HOST_PROFILER_ENABLED" in
+    true|false) ;;
+    *)
+        echo "ERROR: DD_HOST_PROFILER_ENABLED must be one of: true, false (got '$DD_HOST_PROFILER_ENABLED')" >&2
+        exit 1
+        ;;
+esac
+
+if [[ "$DD_HOST_PROFILER_ENABLED" == "true" ]]; then
+    # Egress policy for the profiler, only useful on default-deny clusters
+    # whose CNI enforces NetworkPolicy.
+    case "$DD_HOST_PROFILER_NETWORK_POLICY" in
+        none) ;;
+        standard) HOST_PROFILER_NETWORK_POLICY_FILE="$SCRIPT_DIR/host-profiler-network-policy.yaml" ;;
+        cilium) HOST_PROFILER_NETWORK_POLICY_FILE="$SCRIPT_DIR/host-profiler-cilium-network-policy.yaml" ;;
+        *)
+            echo "ERROR: DD_HOST_PROFILER_NETWORK_POLICY must be one of: none, standard, cilium (got '$DD_HOST_PROFILER_NETWORK_POLICY')" >&2
+            exit 1
+            ;;
+    esac
+    HOST_PROFILER_ENABLED_ARGS=(
+        --set collectors.host-profiler.enabled=true
+        -f "$SCRIPT_DIR/host-profiler-rbac-values.yaml"
+    )
+fi
+
+# Install the Datadog Agent in the ddot flow. Ignored in the upstream flow.
+# TODO: Discuss the default with Pablo. values-ddot.yaml points DD_AGENT_HOST at
+# the ddagent-kube-stack Service, so DDOT SDK features that need the Agent do
+# not work when it is disabled.
+DD_AGENT_ENABLED=${DD_AGENT_ENABLED:-true}
+
+case "$DD_AGENT_ENABLED" in
+    true|false) ;;
+    *)
+        echo "ERROR: DD_AGENT_ENABLED must be one of: true, false (got '$DD_AGENT_ENABLED')" >&2
+        exit 1
+        ;;
+esac
+
+# Auto-instrumentation: comma-separated namespace:language entries. Each entry
+# annotates the namespace so the Operator injects the language's SDK, using the
+# Instrumentation CR that the kube-stack chart creates.
+DD_INSTRUMENT_NAMESPACES=${DD_INSTRUMENT_NAMESPACES:-}
+DD_INSTRUMENT_RESTART=${DD_INSTRUMENT_RESTART:-false}
+INSTRUMENTATION_REF="opentelemetry-operator-system/opentelemetry-kube-stack"
+INSTRUMENT_ANNOTATIONS=() # "namespace annotation" pairs
+INSTRUMENT_NAMESPACES=()  # unique namespaces, for the rollout restart
+
+case "$DD_INSTRUMENT_RESTART" in
+    true|false) ;;
+    *)
+        echo "ERROR: DD_INSTRUMENT_RESTART must be one of: true, false (got '$DD_INSTRUMENT_RESTART')" >&2
+        exit 1
+        ;;
+esac
+
+if [[ -n "$DD_INSTRUMENT_NAMESPACES" ]]; then
+    NAMESPACE_PATTERN='^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$'
+    IFS=, read -ra INSTRUMENT_ENTRIES <<< "$DD_INSTRUMENT_NAMESPACES"
+    for entry in ${INSTRUMENT_ENTRIES[@]+"${INSTRUMENT_ENTRIES[@]}"}; do
+        entry="${entry// /}"
+        if [[ "$entry" != *:* || "${entry#*:}" == *:* ]]; then
+            echo "ERROR: DD_INSTRUMENT_NAMESPACES entries must be namespace:language (got '$entry')" >&2
+            exit 1
+        fi
+        ns="${entry%%:*}"
+        lang="${entry#*:}"
+        if [[ ! "$ns" =~ $NAMESPACE_PATTERN ]]; then
+            echo "ERROR: DD_INSTRUMENT_NAMESPACES has an invalid namespace name (got '$ns' in '$entry')" >&2
+            exit 1
+        fi
+        if [[ "$ns" == "opentelemetry-operator-system" ]]; then
+            echo "ERROR: DD_INSTRUMENT_NAMESPACES cannot include the opentelemetry-operator-system namespace" >&2
+            exit 1
+        fi
+        case "$lang" in
+            java|nodejs|python|dotnet) ;;
+            *)
+                echo "ERROR: DD_INSTRUMENT_NAMESPACES language must be one of: java, nodejs, python, dotnet (got '$lang' in '$entry')" >&2
+                exit 1
+                ;;
+        esac
+        INSTRUMENT_ANNOTATIONS+=("$ns instrumentation.opentelemetry.io/inject-$lang=$INSTRUMENTATION_REF")
+        case " ${INSTRUMENT_NAMESPACES[*]+${INSTRUMENT_NAMESPACES[*]}} " in
+            *" $ns "*) ;;
+            *) INSTRUMENT_NAMESPACES+=("$ns") ;;
+        esac
+    done
+    if [[ ${#INSTRUMENT_ANNOTATIONS[@]} -eq 0 ]]; then
+        echo "ERROR: DD_INSTRUMENT_NAMESPACES has no namespace:language entries (got '$DD_INSTRUMENT_NAMESPACES')" >&2
+        exit 1
+    fi
+fi
+
+#### BEGINNING OF INSTALLATION SCRIPT
+
+# WARNING: dont change "namespace=opentelemetry-operator-system" as it is used in the 'instrumentation' CRD defined in values-otlp-http.yaml and values-ddot.yaml
+
+# Check the namespaces to instrument before installing anything.
+for ns in ${INSTRUMENT_NAMESPACES[@]+"${INSTRUMENT_NAMESPACES[@]}"}; do
+    if ! kubectl get namespace "$ns" > /dev/null; then
+        echo "ERROR: Namespace '$ns' from DD_INSTRUMENT_NAMESPACES does not exist" >&2
+        exit 1
+    fi
+done
+
+echo "Creating Kubernetes namespace..."
+
+kubectl create namespace opentelemetry-operator-system || echo "WARNING: Could not create namespace 'opentelemetry-operator-system' (may already exist or insufficient permissions). Continuing..."
+
+echo "Creating or updating Datadog secret..."
+
+kubectl create secret generic datadog-secret \
+  --namespace opentelemetry-operator-system  \
+  --from-literal="api-key=$DD_API_KEY" \
+  --from-literal="dd-site=$DD_SITE" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+echo "Installing cert-manager (if not already installed)..."
+
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm install cert-manager jetstack/cert-manager \
+  --namespace cert-manager --create-namespace \
+  --set crds.enabled=true  \
+  --wait --timeout 5m \
+  || echo "WARNING: Could not install cert-manager (may already exist or insufficient permissions). Continuing..."
+
+echo "Installing OpenTelemetry Kube Stack Helm Chart..."
+
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+helm repo update
+
+HELM_SET_ARGS=(
+    --set-string "resourceAttributes.deployment\.environment\.name=$DEPLOYMENT_ENVIRONMENT_NAME"
+)
+
+if [[ "$K8S_CLUSTER_TYPE" != "other" ]]; then
+    HELM_SET_ARGS+=(--set "defaultCRConfig.presets.resourceDetection.$K8S_CLUSTER_TYPE.enabled=true")
+fi
+
+if [[ "$K8S_CLUSTER_TYPE" == "eks" ]]; then
+    HELM_SET_ARGS+=(--set "defaultCRConfig.config.processors.resource_detection/env.eks.node_from_env_var=K8S_NODE_NAME")
+fi
+
+if [[ -n "${K8S_CLUSTER_NAME:-}" ]]; then
+    HELM_SET_ARGS+=(--set-string "resourceAttributes.k8s\.cluster\.name=$K8S_CLUSTER_NAME")
+fi
+
+helm upgrade opentelemetry-kube-stack \
+    open-telemetry/opentelemetry-kube-stack \
+    --version 0.23.0 \
+    --install \
+    --namespace opentelemetry-operator-system \
+    --wait --timeout 5m \
+    "${HELM_SET_ARGS[@]}" \
+    -f "$SCRIPT_DIR/$VALUES_FILE" \
+    ${HOST_PROFILER_ENABLED_ARGS[@]+"${HOST_PROFILER_ENABLED_ARGS[@]}"} \
+    ${OVERLAY_VALUES_ARGS[@]+"${OVERLAY_VALUES_ARGS[@]}"}
+
+# The standard and Cilium policies select the same pods and Kubernetes
+# NetworkPolicies are additive: remove both NetworkPolicy before applying
+# the selected one (or none), so a policy from a previous run cannot widen
+# the requested egress.
+kubectl delete networkpolicy \
+  --namespace opentelemetry-operator-system \
+  --ignore-not-found=true \
+  opentelemetry-kube-stack-host-profiler-egress \
+  || echo "WARNING: Could not delete the host-profiler NetworkPolicy. Continuing..."
+kubectl delete ciliumnetworkpolicy \
+  --namespace opentelemetry-operator-system \
+  --ignore-not-found=true \
+  opentelemetry-kube-stack-host-profiler-egress \
+  || echo "WARNING: CiliumNetworkPolicy CRD not installed. Continuing..."
+
+if [[ -n "$HOST_PROFILER_NETWORK_POLICY_FILE" ]]; then
+    echo "Applying the host-profiler egress NetworkPolicy..."
+    kubectl apply -f "$HOST_PROFILER_NETWORK_POLICY_FILE" \
+      || echo "WARNING: Could not apply the host-profiler egress NetworkPolicy (is Cilium installed if you chose the Cilium policy?). Continuing..."
+fi
+
+if [[ "$DD_INSTALL_FLOW" == "ddot" && "$DD_AGENT_ENABLED" == "true" ]]; then
+    echo "Installing Datadog Agent"
+
+    helm repo add datadog https://helm.datadoghq.com
+    helm repo update
+
+    helm upgrade ddagent-kube-stack \
+        datadog/datadog \
+        --version 3.240.0 \
+        --install \
+        --namespace opentelemetry-operator-system \
+        --set-string datadog.clusterName=${K8S_CLUSTER_NAME:-} \
+        --set-string datadog.apiKeyExistingSecret='datadog-secret' \
+        --set-string datadog.site=$DD_SITE \
+        "${HELM_SET_ARGS[@]}" \
+        -f "$SCRIPT_DIR/dd-agent-values.yaml"
+fi
+
+# Runs after the kube-stack upgrade's --wait, which waits for the Operator
+# Deployment to be Ready. The pod webhook uses failurePolicy: Ignore, so a pod
+# created before the webhook serves starts without instrumentation.
+for annotation in ${INSTRUMENT_ANNOTATIONS[@]+"${INSTRUMENT_ANNOTATIONS[@]}"}; do
+    ns="${annotation%% *}"
+    echo "Annotating namespace '$ns' for auto-instrumentation..."
+    kubectl annotate namespace "$ns" --overwrite "${annotation#* }"
+done
+
+if [[ "$DD_INSTRUMENT_RESTART" == "true" ]]; then
+    for ns in ${INSTRUMENT_NAMESPACES[@]+"${INSTRUMENT_NAMESPACES[@]}"}; do
+        echo "Restarting deployments in namespace '$ns'..."
+        kubectl rollout restart deployment --namespace "$ns" \
+          || echo "WARNING: Could not restart deployments in namespace '$ns' (it may have none). Continuing..."
+    done
+fi
