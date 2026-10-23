@@ -1,16 +1,37 @@
 {
   "name": "[otel demo] remediate ad latency (${ENV_NAME})",
-  "description": "Act 3 of DEMO-SCRIPT.md, started by the ad latency monitor. Calls the cluster's remediator: in stage mode only, lift ad's CPU limit (the symptom), wait, then roll back the adHighCpu flag (the cause).",
+  "description": "Act 3 of DEMO-SCRIPT.md, started by the ad latency monitor. In stage mode only: declare an incident, lift ad's CPU limit (the symptom), wait, roll back adHighCpu (the cause), resolve the incident.",
   "spec": {
     "handle": "otel-demo-remediate-ad",
     "triggers": [
-      {"monitorTrigger": {"rateLimit": {"count": 1, "interval": "600s"}}, "startStepNames": ["Check_stage"]},
-      {"apiTrigger": {}, "startStepNames": ["Check_stage"]}
+      {
+        "monitorTrigger": {
+          "rateLimit": {
+            "count": 1,
+            "interval": "600s"
+          }
+        },
+        "startStepNames": [
+          "Check_stage"
+        ]
+      },
+      {
+        "apiTrigger": {},
+        "startStepNames": [
+          "Check_stage"
+        ]
+      }
     ],
     "connectionEnvs": [
-      {"env": "default", "connections": [
-        {"connectionId": "${REMEDIATOR_CONNECTION_ID}", "label": "INTEGRATION_REMEDIATOR"}
-      ]}
+      {
+        "env": "default",
+        "connections": [
+          {
+            "connectionId": "${REMEDIATOR_CONNECTION_ID}",
+            "label": "INTEGRATION_REMEDIATOR"
+          }
+        ]
+      }
     ],
     "steps": [
       {
@@ -18,48 +39,182 @@
         "actionId": "com.datadoghq.http.request",
         "connectionLabel": "INTEGRATION_REMEDIATOR",
         "parameters": [
-          {"name": "verb", "value": "GET"},
-          {"name": "url", "value": "${REMEDIATOR_URL}/stage"},
-          {"name": "responseParsing", "value": "json"}
+          {
+            "name": "verb",
+            "value": "GET"
+          },
+          {
+            "name": "url",
+            "value": "${REMEDIATOR_URL}/stage"
+          },
+          {
+            "name": "responseParsing",
+            "value": "json"
+          }
         ],
-        "outboundEdges": [{"branchName": "main", "nextStepName": "Stage_mode"}]
+        "outboundEdges": [
+          {
+            "branchName": "main",
+            "nextStepName": "Stage_mode"
+          }
+        ]
       },
       {
         "name": "Stage_mode",
         "actionId": "com.datadoghq.core.if",
         "parameters": [
-          {"name": "joinOperator", "value": "and"},
-          {"name": "conditions", "value": [
-            {"comparisonOperator": "eq", "leftValue": "{{ Steps.Check_stage.body.stage_mode }}", "rightValue": true}
-          ]}
+          {
+            "name": "joinOperator",
+            "value": "and"
+          },
+          {
+            "name": "conditions",
+            "value": [
+              {
+                "comparisonOperator": "eq",
+                "leftValue": "{{ Steps.Check_stage.body.stage_mode }}",
+                "rightValue": true
+              }
+            ]
+          }
         ],
-        "outboundEdges": [{"branchName": "true", "nextStepName": "Lift_cpu_limit"}]
+        "outboundEdges": [
+          {
+            "branchName": "true",
+            "nextStepName": "Declare_incident"
+          }
+        ]
+      },
+      {
+        "name": "Declare_incident",
+        "actionId": "com.datadoghq.dd.incidents.createIncident",
+        "parameters": [
+          {
+            "name": "customer_impacted",
+            "value": false
+          },
+          {
+            "name": "title",
+            "value": "ad service latency: adHighCpu flag throttling the JVM (${ENV_NAME})"
+          },
+          {
+            "name": "fields",
+            "value": {
+              "severity": {
+                "type": "dropdown",
+                "value": "SEV-3"
+              },
+              "services": {
+                "type": "autocomplete",
+                "value": [
+                  "ad"
+                ]
+              }
+            }
+          },
+          {
+            "name": "initial_cells",
+            "value": [
+              {
+                "cell_type": "markdown",
+                "content": {
+                  "content": "Declared by the remediation workflow from the ad latency monitor. Next: lift ad's CPU limit (symptom), then roll back adHighCpu (cause)."
+                },
+                "important": true
+              }
+            ]
+          }
+        ],
+        "outboundEdges": [
+          {
+            "branchName": "main",
+            "nextStepName": "Lift_cpu_limit"
+          }
+        ]
       },
       {
         "name": "Lift_cpu_limit",
         "actionId": "com.datadoghq.http.request",
         "connectionLabel": "INTEGRATION_REMEDIATOR",
         "parameters": [
-          {"name": "verb", "value": "POST"},
-          {"name": "url", "value": "${REMEDIATOR_URL}/lift-cpu-limit"},
-          {"name": "responseParsing", "value": "json"}
+          {
+            "name": "verb",
+            "value": "POST"
+          },
+          {
+            "name": "url",
+            "value": "${REMEDIATOR_URL}/lift-cpu-limit"
+          },
+          {
+            "name": "responseParsing",
+            "value": "json"
+          }
         ],
-        "outboundEdges": [{"branchName": "main", "nextStepName": "Wait_for_recovery"}]
+        "outboundEdges": [
+          {
+            "branchName": "main",
+            "nextStepName": "Wait_for_recovery"
+          }
+        ]
       },
       {
         "name": "Wait_for_recovery",
         "actionId": "com.datadoghq.core.sleep",
-        "parameters": [{"name": "durationSeconds", "value": 120}],
-        "outboundEdges": [{"branchName": "main", "nextStepName": "Rollback_flag"}]
+        "parameters": [
+          {
+            "name": "durationSeconds",
+            "value": 120
+          }
+        ],
+        "outboundEdges": [
+          {
+            "branchName": "main",
+            "nextStepName": "Rollback_flag"
+          }
+        ]
       },
       {
         "name": "Rollback_flag",
         "actionId": "com.datadoghq.http.request",
         "connectionLabel": "INTEGRATION_REMEDIATOR",
         "parameters": [
-          {"name": "verb", "value": "POST"},
-          {"name": "url", "value": "${REMEDIATOR_URL}/rollback-flag"},
-          {"name": "responseParsing", "value": "json"}
+          {
+            "name": "verb",
+            "value": "POST"
+          },
+          {
+            "name": "url",
+            "value": "${REMEDIATOR_URL}/rollback-flag"
+          },
+          {
+            "name": "responseParsing",
+            "value": "json"
+          }
+        ],
+        "outboundEdges": [
+          {
+            "branchName": "main",
+            "nextStepName": "Resolve_incident"
+          }
+        ]
+      },
+      {
+        "name": "Resolve_incident",
+        "actionId": "com.datadoghq.dd.incidents.updateIncident",
+        "parameters": [
+          {
+            "name": "incident_id",
+            "value": "{{ Steps.Declare_incident.incident_uuid }}"
+          },
+          {
+            "name": "fields",
+            "value": {
+              "state": {
+                "type": "dropdown",
+                "value": "resolved"
+              }
+            }
+          }
         ]
       }
     ]

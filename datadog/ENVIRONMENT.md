@@ -32,10 +32,15 @@ Built from git by `local/dd-apply.py` (run by `up.sh`), matched by name, tagged
 | RUM application `astronomy-shop (otel-demo)` | `8d3ef4e9-394d-4519-9cbe-aeee1a60d120` | created 2026-10-22 |
 | Monitor `[otel demo] ad service latency anomaly (otel-demo)` | 35241062 | created 2026-10-22; needs about a day of history before its baseline is trustworthy |
 | Monitor `[otel demo] ad service p95 latency high (otel-demo)` (per-minute p95 over 20 ms) | 35243022 | created 2026-10-22; Act 1's alert. Replaced the 50 ms monitor 35241065 (deleted), which stayed OK through the problem |
-| Workflow `[otel demo] remediate ad latency (otel-demo)`, handle `@workflow-otel-demo-remediate-ad` | `d0eecab0-b4b3-4d35-b717-2a43164e32a9` | 2026-10-23; started by the latency monitor on Alert; acts only in stage mode |
+| Workflow `[otel demo] remediate ad latency (otel-demo)`, handle `@workflow-otel-demo-remediate-ad` | `d0eecab0-b4b3-4d35-b717-2a43164e32a9` | 2026-10-23; started by the latency monitor on Alert; acts only in stage mode; declares an incident (SEV-3, services: ad) and resolves it at the end |
+| Incident Management | first incident #1 on 2026-10-23, declared by the workflow | resolving needs an Incident Management seat for the workflow's owner (403 "Seat Required" without one); creating does not |
 | HTTP connection `otel-demo remediator` (token auth) | `d9d26ff3-d299-47af-ac63-ffae3e0bd217` | 2026-10-23; holds the remediator token |
 | APM retention filter `otel demo: every span (otel-demo)` | `env:otel-demo` at 100% | created 2026-10-22, so the demo's traces stay searchable after Live Search's 15 minutes |
 | Log index for the env | none | creation refused (403) even with an unscoped key; not needed here, since `main` has no exclusion filter in this org |
+
+### Presenter script
+
+The working script, with screenshots, is the Google Doc [OpenTelemetry Demo for Re:Invent 2026 and Beyond](https://docs.google.com/document/d/1wPKNAjw9LtjwA8UE87sPxdeEPcX8PrjnOWhUorht6MU/edit) (Matthew's; Step | Talking points table modeled on the Datadog 101 demo script). `DEMO-SCRIPT.md` is the earlier repo version; the Doc wins where they differ.
 
 ### Org settings and internal flags
 

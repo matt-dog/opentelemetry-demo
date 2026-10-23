@@ -105,6 +105,18 @@ p95 18 to 46 ms, the pod at 1.8 cores; the four load threads take any ceiling), 
 explicit request Kubernetes sets request equal to limit, so a high limit cannot schedule.
 `stage.sh stop` already restores git's 300m limit.
 
+## Findings that shape the script (2026-10-23)
+
+- Change tracking gets feature-flag changes only from Datadog Feature Flags, LaunchDarkly or the
+  Events API; there is no OTLP route, and OpenTelemetry has no convention for flag changes (only
+  `feature_flag.evaluation`, Release Candidate). So the change event stays an Events API call,
+  and the script says so.
+- The flag is in the OTLP data anyway: ad's `resolve` spans carry `feature_flag.key: adHighCpu`
+  and flagd's `resolveBoolean` spans add `feature_flag.result.variant` (off/on), the OTel
+  convention. Grouping those spans by variant over time shows the flip in pure OTel data.
+- The service page had no incidents, monitors of its own or SLOs because none existed. The
+  workflow now declares an incident; SLOs and service health monitors are proposed.
+
 ## Known limits
 
 - The collector images are dev builds pinned by the kube-stack ddot flow, not released
@@ -115,6 +127,8 @@ explicit request Kubernetes sets request equal to limit, so a high limit cannot 
   list shows each node a second time with only `otel` on it, and Fleet Automation uses that name.
 - The DDOT SDK's own logs still don't reach Datadog (why `ad` stays upstream).
 - No Datadog OTel dashboard for Redis yet (slide 26 roadmap); its metrics arrive.
+- Resolving the workflow's incident needs an Incident Management seat (403 "Seat Required"); the
+  declare step works without one.
 - Session Replay: no session has a replay. The Browser SDK (7.16.1, CDN) logs "Recorder failed to
   start ... Failed to resolve module specifier './chunks/datadogRecorder-...'", also on a bare
   test page, in the shopper's headless Chromium 129. Not yet checked in a regular Chrome; if it

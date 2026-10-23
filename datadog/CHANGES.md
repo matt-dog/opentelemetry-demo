@@ -22,11 +22,25 @@ into git or undone.
 
 | Date | Where | Change | Why | Status |
 |---|---|---|---|---|
+| 2026-10-23 | matt-dog Incident Management | Incident #1 declared by the workflow test, still active | Resolve step refused: no Incident Management seat | Resolve by hand, or rerun once a seat is assigned |
 | 2026-10-23 | matt-dog org, Mosaic | `graphing_semantic_metric_names` on (Matthew) | metrics features for OTel metric names, next to Semantic Query Mode | on; internal flag, set outside git |
 | 2026-10-22 | matt-dog org settings, Preferences (UI) | OTel Semantic Query Mode on | queries match OTel and Datadog metric names | on; an org setting, no API found to set it from git |
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-10-23 · Workflow declares and resolves an incident; findings on flags and change tracking
+- **What:** `workflow-remediate-ad.json` gains `Declare_incident` (after the stage check: SEV-3,
+  services ad, a timeline note) and `Resolve_incident` (after the flag rollback). The presenter
+  script moved to a Google Doc (link in ENVIRONMENT.md); DEMO-PLAN.md records the findings below.
+- **Why:** the ad service page showed no incidents, because nothing declared one. Stage mode
+  only, so the hourly schedule doesn't open 24 incidents a day.
+- **Verified (API, stage mode, 21:02 UTC):** every step through the rollback succeeded and incident
+  #1 was created with services ad. `Resolve_incident` failed with 403 "Seat Required": updating an
+  incident needs an Incident Management seat for the workflow's owner.
+- **Also found:** flagd and ad spans carry OpenTelemetry's `feature_flag.*` attributes; change
+  tracking has no OTLP source and OTel no flag-change convention, so the change event stays an
+  Events API call (DEMO-PLAN.md, Findings).
 
 ### 2026-10-23 · Act 3 rebuilt on Workflow Automation calling our remediator; flags only through flagd-ui's API
 - **What:**
