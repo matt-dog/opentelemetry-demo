@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Apply the Datadog objects in datadog/ (monitors, log index, RUM application, APM
-retention filter) for one demo env.
+"""Apply the Datadog objects in datadog/ (monitors, SLOs, log index, RUM application, APM
+retention filter, remediation workflow) for one demo env.
 
   DD_API_KEY=... DD_APP_KEY=... ENV_NAME=otel-demo datadog/local/dd-apply.py
 
@@ -178,6 +178,28 @@ def apply_workflow(path, env):
         print(f"workflow created: {wf['name']} ({(made or {}).get('data', {}).get('id')}, {status})")
 
 
+def apply_slo(s):
+    """Create or update an SLO, matched by name and tagged like the monitors. Prints the API's
+    error text when one is refused, since a malformed SLO otherwise fails silently."""
+    s["tags"] = sorted(set(s.get("tags", [])) | {TAG})
+    _, found = call("GET", "/api/v1/slo?" + urllib.parse.urlencode({"query": s["name"], "limit": 50}))
+    same = [x for x in (found or {}).get("data") or [] if x["name"] == s["name"]]
+    method, path = ("PUT", f"/api/v1/slo/{same[0]['id']}") if same else ("POST", "/api/v1/slo")
+    req = urllib.request.Request(API + path, method=method, data=json.dumps(s).encode(),
+                                 headers={"DD-API-KEY": os.environ["DD_API_KEY"],
+                                          "DD-APPLICATION-KEY": os.environ["DD_APP_KEY"],
+                                          "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            out = json.load(r)
+        sid = (out.get("data") or [{}])[0].get("id") if isinstance(out.get("data"), list) else out.get("data", {}).get("id")
+        print(f"SLO {'updated' if same else 'created'}: {s['name']} ({sid})")
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise Refused(f"{method} {path}: {e.code}")
+        print(f"SLO not applied: {s['name']} ({e.code}: {e.read().decode()[:300]})")
+
+
 def main():
     env = os.environ["ENV_NAME"]
     if not os.environ.get("DD_APP_KEY"):
@@ -191,6 +213,8 @@ def main():
              ("workflow", lambda: apply_workflow(HERE / "workflow-remediate-ad.json", env))]
     steps += [(f"monitor {f.name}", lambda f=f: apply_monitor(load(f, env)))
               for f in sorted((HERE / "monitors").glob("*.json"))]
+    steps += [(f"SLO {f.name}", lambda f=f: apply_slo(load(f, env)))
+              for f in sorted((HERE / "slos").glob("*.json"))]
     for name, step in steps:
         try:
             step()

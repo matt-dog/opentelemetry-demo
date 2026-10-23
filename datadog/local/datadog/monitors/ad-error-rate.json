@@ -1,0 +1,14 @@
+{
+  "name": "[otel demo] ad service error rate (${ENV_NAME})",
+  "type": "query alert",
+  "query": "sum(last_10m):default_zero(sum:trace.grpc.server.request.errors{env:${ENV_NAME},service:ad}.as_count()) / sum:trace.grpc.server.request.hits{env:${ENV_NAME},service:ad}.as_count() > 0.05",
+  "message": "Error rate on the ad service is above 5% over 10 minutes, from the OTel-derived trace metrics. The service health monitor next to the latency one, so the ad service page shows both. No notification targets on purpose.",
+  "tags": ["env:${ENV_NAME}", "service:ad", "demo:service-health"],
+  "priority": 3,
+  "options": {
+    "thresholds": {"critical": 0.05},
+    "notify_no_data": false,
+    "include_tags": true,
+    "require_full_window": false
+  }
+}

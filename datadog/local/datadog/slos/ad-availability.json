@@ -1,0 +1,11 @@
+{
+  "name": "[otel demo] ad availability (${ENV_NAME})",
+  "type": "metric",
+  "description": "Successful ad requests over all ad requests, from the OTel-derived trace metrics. No errors is counted as zero errors (default_zero). See DEMO-PLAN.md.",
+  "query": {
+    "numerator": "sum:trace.grpc.server.request.hits{env:${ENV_NAME},service:ad}.as_count() - default_zero(sum:trace.grpc.server.request.errors{env:${ENV_NAME},service:ad}.as_count())",
+    "denominator": "sum:trace.grpc.server.request.hits{env:${ENV_NAME},service:ad}.as_count()"
+  },
+  "thresholds": [{"timeframe": "7d", "target": 99.9}],
+  "tags": ["env:${ENV_NAME}", "service:ad"]
+}

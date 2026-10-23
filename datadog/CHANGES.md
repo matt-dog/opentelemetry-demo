@@ -29,6 +29,16 @@ into git or undone.
 
 ## Log
 
+### 2026-10-23 · SLOs and an error-rate monitor for the ad service
+- **What:** `local/datadog/slos/ad-latency.json` (time slice: per-minute p95 under 20 ms, 99%, 7d),
+  `slos/ad-availability.json` (hits minus errors over hits, 99.9%, 7d) and
+  `monitors/ad-error-rate.json`. `dd-apply.py` applies SLOs (matched by name, tagged
+  `managed_by:otel-demo-local`) and prints the API's error text if one is refused.
+- **Why:** the ad service page showed no SLOs and only latency monitors; Matthew asked for SLOs
+  and a service health monitor. Everything uses the OTel-derived `trace.grpc.server.request` metric.
+- **Verified (API):** latency SLO 90.3% over 24h (the hourly windows burn it), availability 100%,
+  error-rate monitor OK. Also checked: the anomaly monitor had 12 false alarms in 24h (DEMO-PLAN.md).
+
 ### 2026-10-23 · Workflow declares and resolves an incident; findings on flags and change tracking
 - **What:** `workflow-remediate-ad.json` gains `Declare_incident` (after the stage check: SEV-3,
   services ad, a timeline note) and `Resolve_incident` (after the flag rollback). The presenter

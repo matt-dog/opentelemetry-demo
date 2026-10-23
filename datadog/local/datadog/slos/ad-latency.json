@@ -1,0 +1,18 @@
+{
+  "name": "[otel demo] ad GetAds p95 under 20 ms (${ENV_NAME})",
+  "type": "time_slice",
+  "description": "Share of minutes in which the ad service's per-minute p95 is under 20 ms, from the OTel-derived trace metric (computed from the ad service's OTLP spans). The adHighCpu windows (hourly :30 to :45 UTC, and stage.sh) burn it: each window is about 15 bad minutes. See DEMO-PLAN.md.",
+  "sli_specification": {
+    "time_slice": {
+      "query": {
+        "formulas": [{"formula": "query1"}],
+        "queries": [{"data_source": "metrics", "name": "query1", "query": "p95:trace.grpc.server.request{env:${ENV_NAME},service:ad}"}]
+      },
+      "comparator": "<",
+      "threshold": 0.02,
+      "query_interval_seconds": 60
+    }
+  },
+  "thresholds": [{"timeframe": "7d", "target": 99.0}],
+  "tags": ["env:${ENV_NAME}", "service:ad"]
+}

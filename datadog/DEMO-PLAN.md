@@ -115,7 +115,11 @@ explicit request Kubernetes sets request equal to limit, so a high limit cannot 
   and flagd's `resolveBoolean` spans add `feature_flag.result.variant` (off/on), the OTel
   convention. Grouping those spans by variant over time shows the flip in pure OTel data.
 - The service page had no incidents, monitors of its own or SLOs because none existed. The
-  workflow now declares an incident; SLOs and service health monitors are proposed.
+  workflow now declares an incident, and `dd-apply.py` builds two SLOs and an error-rate monitor
+  (`local/datadog/slos/`, `monitors/ad-error-rate.json`), all on the OTel-derived trace metric.
+- The anomaly monitor is not ready to lead step 1: in its first 24 hours, 13 of 25 triggers fell
+  in the problem windows and 12 were false alarms. The hourly schedule also teaches a seasonal
+  algorithm that the spike is normal. The threshold monitor leads until that is resolved.
 
 ## Known limits
 
