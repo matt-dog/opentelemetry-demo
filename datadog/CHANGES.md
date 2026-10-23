@@ -22,11 +22,19 @@ into git or undone.
 
 | Date | Where | Change | Why | Status |
 |---|---|---|---|---|
-| 2026-10-22 | GKE `otel-demo`, Helm release `par`; matt-dog connections | Private Action Runner enrolled by a one-off Job and installed with `local/par-values.yaml`; two connections created through the API | Act 3's workflow needs a runner in the cluster | Move into `up.sh` (enroll if missing, create connections) |
+| 2026-10-23 | matt-dog org, Mosaic | `graphing_semantic_metric_names` on (Matthew) | metrics features for OTel metric names, next to Semantic Query Mode | on; internal flag, set outside git |
 | 2026-10-22 | matt-dog org settings, Preferences (UI) | OTel Semantic Query Mode on | queries match OTel and Datadog metric names | on; an org setting, no API found to set it from git |
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-10-23 · Private Action Runner removed; Mosaic flag on
+- **What:** the runner (Helm release `par`), its two connections and the remediation workflow
+  deleted; `par-values.yaml` and `workflow-remediate-ad.json` removed; the monitor no longer
+  mentions the workflow. `graphing_semantic_metric_names` is on in the org (Matthew).
+- **Why:** the runner is Agent-based, which the demo's no-Agent story can't carry. Act 3 is
+  redesigned without it (DEMO-PLAN.md). The runner's registration still shows in Action Catalog
+  > Private Action Runners until deleted there (no API found).
 
 ### 2026-10-22 · Act 3 (auto-remediation) built, not yet run end to end; step 1 rehearsed
 - **What:** `local/datadog/workflow-remediate-ad.json` (published by `dd-apply.py`, which resolves

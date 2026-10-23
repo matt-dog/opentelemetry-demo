@@ -32,9 +32,6 @@ Built from git by `local/dd-apply.py` (run by `up.sh`), matched by name, tagged
 | RUM application `astronomy-shop (otel-demo)` | `8d3ef4e9-394d-4519-9cbe-aeee1a60d120` | created 2026-10-22 |
 | Monitor `[otel demo] ad service latency anomaly (otel-demo)` | 35241062 | created 2026-10-22; needs about a day of history before its baseline is trustworthy |
 | Monitor `[otel demo] ad service p95 latency high (otel-demo)` (per-minute p95 over 20 ms) | 35243022 | created 2026-10-22; Act 1's alert. Replaced the 50 ms monitor 35241065 (deleted), which stayed OK through the problem |
-| Workflow `[otel demo] remediate ad latency (otel-demo)`, handle `@workflow-otel-demo-remediate-ad` | `a89c100d-0828-457d-83e8-083c3a0e1e69` | created 2026-10-22, published; not yet run end to end |
-| Private Action Runner `otel-demo` | `runner-MQaXrjBpULW9RWABh2La9z` | enrolled 2026-10-22; Helm release `par` in namespace `otel-demo` |
-| Connections `otel-demo kubernetes`, `otel-demo flagd` | `4b640376-0fbc-4937-bb50-2e291869d4bd`, `ad5de315-e428-4fb0-964f-f3b25c0c3fdf` | on that runner; created through the API |
 | APM retention filter `otel demo: every span (otel-demo)` | `env:otel-demo` at 100% | created 2026-10-22, so the demo's traces stay searchable after Live Search's 15 minutes |
 | Log index for the env | none | creation refused (403) even with an unscoped key; not needed here, since `main` has no exclusion filter in this org |
 
@@ -46,7 +43,7 @@ in `CHANGES.md` when it is turned on.
 | Setting | Where | Status |
 |---|---|---|
 | OTel Semantic Query Mode | Organization Settings, Preferences | on since 2026-10-22 (Matthew) |
-| `graphing_semantic_metric_names` (metrics features for OTel names) | Mosaic feature flag for the org | not confirmed on |
+| `graphing_semantic_metric_names` (metrics features for OTel names) | Mosaic feature flag for the org | on since 2026-10-23 (Matthew) |
 
 ## Kubernetes
 

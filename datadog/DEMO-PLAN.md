@@ -68,42 +68,22 @@ Semantic conventions throughout: filter by `service.name`, `deployment.environme
 6. `DEMO-SCRIPT.md`: the walkthrough with direct links for each step.
 7. Later: the anomaly monitor once it has history (about a day); a presenter dashboard.
 
-## Act 3: auto-remediation (approved 2026-10-22)
+## Act 3: auto-remediation (approved 2026-10-22; redesign pending)
 
-The monitor that opens Act 1 also starts a Datadog workflow that fixes the problem twice:
-first the symptom, then the cause.
+The monitor that opens Act 1 also starts an automatic fix, twice: first the symptom (lift ad's
+CPU limit, keeping a 300m request), then the cause (roll back `adHighCpu`), with a change event
+for each. Stage mode only, so the hourly schedule never fights it.
 
-1. **Raise ad's CPU limit** (Kubernetes patch on the `ad` deployment): latency recovers in
-   about a minute, but the load threads are still running.
-2. **Roll back the change behind the alert**: `adHighCpu` back to off through flagd-ui's
-   API, the same change the event on the monitor names. That is the real fix.
-3. Post a change event for each action, so the service page shows what the workflow did.
+No Private Action Runner (Matthew, 2026-10-23: it is Agent-based). A first build used one; it
+was removed the same day (CHANGES.md). Without it, Datadog cannot reach into the cluster, so
+something of ours does the Kubernetes work. Options put to Matthew:
+- **A.** A remediator pod of our own that polls the monitor through the Datadog API and acts.
+- **B.** Workflow Automation calling a small public endpoint of ours over HTTPS.
 
-How it is built:
-- A standalone **Private Action Runner** in the cluster (Helm chart
-  `datadog/private-action-runner`), enrolled with the API and app keys from a one-off Job.
-  It only connects out to Datadog. It is a Datadog component (not the Agent), so it is
-  presented as optional, like the Agent on slide 20.
-- The workflow is defined in git (`local/datadog/workflow-remediate-ad.json`) and applied by
-  `dd-apply.py`; the monitor's message mentions it.
-- **Stage mode only.** The hourly schedule fires the same monitor, and a remediation then
-  would fight the schedule (it turns the flag back on within 30 s). The workflow's first step
-  reads the scenarios deployment: paused (`stage.sh start`) means act, running means stop.
-- `stage.sh stop` puts ad's CPU limit back to 300m, so a live patch never drifts from git.
-- The CPU step **removes** the limit (keeping a 300m request) rather than raising it. Measured
-  2026-10-22: at a 2-core limit p95 was still 18 to 46 ms with the pod using 1.8 cores (the four
-  load threads take any ceiling), and a 6-core limit could not schedule, because without an
-  explicit request Kubernetes sets the request equal to the limit.
-
-Status 2026-10-22, paused at Matthew's request:
-- Done: runner `otel-demo` installed (Helm release `par` in `otel-demo`, `local/par-values.yaml`);
-  connections `otel-demo kubernetes` and `otel-demo flagd`; workflow published from git
-  (`workflow-remediate-ad.json`, applied by `dd-apply.py`); the monitor mentions it on Alert.
-- Not done: one end-to-end run (cue, Alert, workflow, recovery, rollback, events); `up.sh`
-  does not yet enroll and install the runner or create the connections (done by hand once,
-  see CHANGES.md); the runner identity lives only in that Helm release, so a new cluster needs a
-  new enrollment and connections.
-
+Measured 2026-10-22 and still true for either: raising the limit does not fix latency (2 cores:
+p95 18 to 46 ms, the pod at 1.8 cores; the four load threads take any ceiling), and without an
+explicit request Kubernetes sets request equal to limit, so a high limit cannot schedule.
+`stage.sh stop` already restores git's 300m limit.
 
 ## Known limits
 
