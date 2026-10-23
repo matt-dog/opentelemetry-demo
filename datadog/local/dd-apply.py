@@ -69,8 +69,8 @@ def apply_monitor(m):
         call("PUT", f"/api/v1/monitor/{have['id']}", m)
         print(f"monitor updated: {m['name']} ({have['id']})")
     else:
-        _, made = call("POST", "/api/v1/monitor", m)
-        print(f"monitor created: {m['name']} ({made['id']})")
+        status, made = call("POST", "/api/v1/monitor", m)
+        print(f"monitor created: {m['name']} ({made['id']})" if made else f"monitor not created: {m['name']} ({status})")
 
 
 def apply_index(ix):
@@ -127,6 +127,57 @@ def apply_retention(rf):
         print(f"retention filter created: {rf['name']} ({status})")
 
 
+def apply_connection(env):
+    """Create or update the token-auth HTTP connection "<env> remediator" that the workflow
+    uses to call the cluster's remediator. REMEDIATOR_URL and REMEDIATOR_TOKEN come from
+    up.sh (the token from the remediator-token secret); the token is stored only here and
+    in that secret."""
+    url, token = os.environ.get("REMEDIATOR_URL"), os.environ.get("REMEDIATOR_TOKEN")
+    if not url or not token:
+        print("remediator connection skipped: needs REMEDIATOR_URL and REMEDIATOR_TOKEN (up.sh gke)")
+        return
+    attrs = {"name": f"{env} remediator", "integration": {
+        "type": "HTTP", "base_url": url,
+        "credentials": {"type": "HTTPTokenAuth",
+                        "tokens": [{"name": "remediatorToken", "type": "SECRET", "value": token}],
+                        "headers": [{"name": "Authorization", "value": "Bearer {{ remediatorToken }}"}]}}}
+    _, conns = call("GET", "/api/v2/actions/connections")
+    same = [c for c in (conns or {}).get("data", []) if c["attributes"]["name"] == attrs["name"]]
+    if same:
+        status, _ = call("PATCH", f"/api/v2/actions/connections/{same[0]['id']}",
+                         {"data": {"type": "action_connection", "attributes": attrs}})
+        print(f"remediator connection updated: {attrs['name']} ({status})")
+    else:
+        status, _ = call("POST", "/api/v2/actions/connections", {"data": {"type": "action_connection", "attributes": attrs}})
+        print(f"remediator connection created: {attrs['name']} ({status})")
+
+
+def apply_workflow(path, env):
+    """Create or update the remediation workflow (matched by name) and publish it. It calls
+    the cluster's remediator through the token-auth HTTP connection "<env> remediator"
+    (up.sh creates both and passes REMEDIATOR_URL). safe_substitute, because the
+    workflow's expressions use {{ }} and could use $."""
+    url = os.environ.get("REMEDIATOR_URL")
+    _, conns = call("GET", "/api/v2/actions/connections")
+    by_name = {c["attributes"]["name"]: c["id"] for c in (conns or {}).get("data", [])}
+    if not url or f"{env} remediator" not in by_name:
+        print(f"workflow skipped: needs REMEDIATOR_URL and a connection named '{env} remediator'")
+        return
+    wf = json.loads(string.Template(path.read_text()).safe_substitute(
+        ENV_NAME=env, REMEDIATOR_URL=url, REMEDIATOR_CONNECTION_ID=by_name[f"{env} remediator"]))
+    attrs = {"name": wf["name"], "description": wf["description"], "spec": wf["spec"],
+             "published": True, "tags": [f"env:{env}", "service:ad", TAG]}
+    _, found = call("GET", "/api/v2/workflows?" + urllib.parse.urlencode({"filter[query]": wf["name"]}))
+    same = [w for w in (found or {}).get("data", []) if w["attributes"]["name"] == wf["name"]]
+    if same:
+        status, _ = call("PATCH", f"/api/v2/workflows/{same[0]['id']}",
+                         {"data": {"type": "workflows", "id": same[0]["id"], "attributes": attrs}})
+        print(f"workflow updated: {wf['name']} ({same[0]['id']}, {status})")
+    else:
+        status, made = call("POST", "/api/v2/workflows", {"data": {"type": "workflows", "attributes": attrs}})
+        print(f"workflow created: {wf['name']} ({(made or {}).get('data', {}).get('id')}, {status})")
+
+
 def main():
     env = os.environ["ENV_NAME"]
     if not os.environ.get("DD_APP_KEY"):
@@ -135,7 +186,9 @@ def main():
     # Each step stands alone, so a key refused for one (say, log indexes) still applies the rest.
     steps = [("log index", lambda: apply_index(load(HERE / "log-index.json", env))),
              ("RUM application", lambda: apply_rum(load(HERE / "rum-application.json", env), os.environ.get("RUM_OUT"))),
-             ("retention filter", lambda: apply_retention(load(HERE / "retention-filter.json", env)))]
+             ("retention filter", lambda: apply_retention(load(HERE / "retention-filter.json", env))),
+             ("remediator connection", lambda: apply_connection(env)),
+             ("workflow", lambda: apply_workflow(HERE / "workflow-remediate-ad.json", env))]
     steps += [(f"monitor {f.name}", lambda f=f: apply_monitor(load(f, env)))
               for f in sorted((HERE / "monitors").glob("*.json"))]
     for name, step in steps:

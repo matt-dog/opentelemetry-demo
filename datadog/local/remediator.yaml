@@ -1,0 +1,234 @@
+# The remediator: a small endpoint of ours that Datadog Workflow Automation calls to fix
+# the Act 1 problem (Act 3 in DEMO-PLAN.md). Nothing Datadog runs in the cluster for it.
+#
+#   GET  /stage            stage mode (scenarios paused by stage.sh), adHighCpu, ad's CPU limit
+#   POST /lift-cpu-limit   the symptom: remove ad's CPU limit, keeping a 300m request
+#   POST /rollback-flag    the cause: adHighCpu back to off, through flagd-ui
+#   GET  /healthz          for the load balancer's health check (no auth, no data)
+#
+# Both actions refuse outside stage mode, so the hourly schedule never fights them, and
+# each posts a Datadog change event on the ad service. Every other path needs
+# "Authorization: Bearer <token>" (the remediator-token secret, made by up.sh; Datadog
+# holds it in a token-auth HTTP connection). Exposure, in layers: HTTPS through a GKE
+# Ingress with a Google-managed certificate for __HOST__ on the reserved static IP
+# otel-demo-remediator; the Cloud Armor policy otel-demo-remediator, which admits only
+# Datadog's webhooks IP ranges; the token. Kubernetes access: get and patch on
+# deployments in this namespace. up.sh fills in __HOST__ and applies it.
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: remediator, namespace: otel-demo}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: remediator, namespace: otel-demo}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["ad", "scenarios"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: remediator, namespace: otel-demo}
+subjects: [{kind: ServiceAccount, name: remediator, namespace: otel-demo}]
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: remediator}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: remediator, namespace: otel-demo}
+data:
+  remediator.py: |
+    import hmac, json, os, ssl, urllib.request
+    from datetime import datetime, timezone
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    TOKEN = os.environ["REMEDIATOR_TOKEN"]
+    NS = "otel-demo"
+    K8S = "https://kubernetes.default.svc"
+    SA = "/var/run/secrets/kubernetes.io/serviceaccount"
+    DEPLOY = f"/apis/apps/v1/namespaces/{NS}/deployments/"
+    FLAGD = "http://flagd:4000/api"
+    EVENTS = f"https://event-management-intake.{os.environ.get('DD_SITE', 'datad0g.com')}/api/v2/events"
+
+    def k8s(method, path, body=None, ctype="application/json"):
+        req = urllib.request.Request(K8S + path, method=method,
+                                     data=None if body is None else json.dumps(body).encode(),
+                                     headers={"Authorization": "Bearer " + open(SA + "/token").read(),
+                                              "Content-Type": ctype})
+        ctx = ssl.create_default_context(cafile=SA + "/ca.crt")
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as r:
+            return json.load(r)
+
+    def flagd(path, body=None):
+        req = urllib.request.Request(FLAGD + path, method="GET" if body is None else "POST",
+                                     data=None if body is None else json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return json.load(r)
+
+    def change_event(title, message, resource, rtype, old, new):
+        key = os.environ.get("DD_API_KEY")
+        if not key:
+            return
+        body = {"data": {"type": "event", "attributes": {
+            "category": "change", "integration_id": "custom-events", "title": title, "message": message,
+            "tags": [f"env:{os.environ.get('DD_ENV', '')}", "service:ad", "source:remediation"],
+            "attributes": {"changed_resource": {"name": resource, "type": rtype},
+                           "impacted_resources": [{"name": "ad", "type": "service"}],
+                           "prev_value": {"value": old}, "new_value": {"value": new},
+                           "author": {"name": "Datadog Workflow Automation", "type": "automation"}}}}}
+        req = urllib.request.Request(EVENTS, data=json.dumps(body).encode(), method="POST",
+                                     headers={"Content-Type": "application/json", "DD-API-KEY": key})
+        try:
+            urllib.request.urlopen(req, timeout=10).close()
+        except Exception as e:
+            print("change event failed:", e, flush=True)
+
+    def ad_cpu_limit(ad):
+        return ad["spec"]["template"]["spec"]["containers"][0].get("resources", {}).get("limits", {}).get("cpu")
+
+    def stage():
+        scenarios = k8s("GET", DEPLOY + "scenarios")
+        return {"stage_mode": scenarios["spec"].get("replicas", 1) == 0,
+                "adHighCpu": flagd("/read")["flags"]["adHighCpu"]["defaultVariant"],
+                "ad_cpu_limit": ad_cpu_limit(k8s("GET", DEPLOY + "ad"))}
+
+    def lift_cpu_limit():
+        limit = ad_cpu_limit(k8s("GET", DEPLOY + "ad"))
+        if limit is None:
+            return {"changed": False, "ad_cpu_limit": None}
+        # Keep a request: without one, Kubernetes sets it equal to the limit.
+        base = "/spec/template/spec/containers/0/resources"
+        k8s("PATCH", DEPLOY + "ad", [{"op": "add", "path": base + "/requests", "value": {"cpu": "300m", "memory": "300Mi"}},
+                                     {"op": "remove", "path": base + "/limits/cpu"}], "application/json-patch+json")
+        change_event("Workflow lifted ad CPU limit (ad)",
+                     f"Datadog Workflow Automation removed the ad container's {limit} CPU limit (keeping a 300m request), "
+                     "ending CPU throttling. Latency recovers; the cause, the adHighCpu flag, is rolled back next.",
+                     "ad deployment CPU limit", "configuration", limit, "none")
+        return {"changed": True, "ad_cpu_limit_was": limit}
+
+    def rollback_flag():
+        flags = flagd("/read")["flags"]
+        old = flags["adHighCpu"]["defaultVariant"]
+        if old == "off":
+            return {"changed": False, "adHighCpu": "off"}
+        flags["adHighCpu"]["defaultVariant"] = "off"
+        flagd("/write", {"data": {"flags": flags}})  # flagd-ui replaces the whole file
+        change_event("Workflow rolled back adHighCpu to off (ad)",
+                     f"Datadog Workflow Automation rolled back the change behind the ad latency alert: adHighCpu {old} to off.",
+                     "adHighCpu", "feature_flag", old, "off")
+        return {"changed": True, "adHighCpu_was": old}
+
+    class Handler(BaseHTTPRequestHandler):
+        def reply(self, code, body):
+            data = json.dumps(body).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def authorized(self):
+            return hmac.compare_digest(self.headers.get("Authorization", ""), "Bearer " + TOKEN)
+
+        def handle_one(self, actions):
+            if self.path == "/healthz":
+                return self.reply(200, {"ok": True})
+            if not self.authorized():
+                return self.reply(401, {"error": "unauthorized"})
+            action = actions.get(self.path)
+            if action is None:
+                return self.reply(404, {"error": "not found"})
+            try:
+                if self.command == "POST" and not stage()["stage_mode"]:
+                    return self.reply(409, {"error": "not in stage mode; stage.sh start pauses the schedule"})
+                return self.reply(200, action())
+            except Exception as e:
+                return self.reply(500, {"error": str(e)})
+
+        def do_GET(self):
+            self.handle_one({"/stage": stage})
+
+        def do_POST(self):
+            self.handle_one({"/lift-cpu-limit": lift_cpu_limit, "/rollback-flag": rollback_flag})
+
+        def log_message(self, fmt, *args):  # one line per request, never the token
+            print(datetime.now(timezone.utc).isoformat(timespec="seconds"), self.command, self.path,
+                  args[1] if len(args) > 1 else "", flush=True)
+
+    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: remediator, namespace: otel-demo}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: remediator}}
+  template:
+    metadata:
+      labels: {app: remediator}
+    spec:
+      serviceAccountName: remediator
+      containers:
+        - name: remediator
+          image: python:3.12-slim
+          command: ["python", "-u", "/app/remediator.py"]
+          ports: [{containerPort: 8080}]
+          env:
+            - name: REMEDIATOR_TOKEN
+              valueFrom: {secretKeyRef: {name: remediator-token, key: token}}
+            - name: DD_API_KEY
+              valueFrom: {secretKeyRef: {name: scenarios-dd, key: DD_API_KEY, optional: true}}
+            - name: DD_ENV
+              valueFrom: {configMapKeyRef: {name: scenarios-env, key: DD_ENV}}
+            - name: DD_SITE
+              valueFrom: {configMapKeyRef: {name: scenarios-env, key: DD_SITE}}
+          readinessProbe:
+            httpGet: {path: /healthz, port: 8080}
+          volumeMounts: [{name: app, mountPath: /app}]
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 64Mi}
+      volumes:
+        - name: app
+          configMap: {name: remediator}
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata: {name: remediator, namespace: otel-demo}
+spec:
+  securityPolicy: {name: otel-demo-remediator}
+  healthCheck: {type: HTTP, requestPath: /healthz, port: 8080}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: remediator
+  namespace: otel-demo
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "remediator"}'
+spec:
+  type: ClusterIP
+  selector: {app: remediator}
+  ports: [{port: 8080, targetPort: 8080}]
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata: {name: remediator, namespace: otel-demo}
+spec:
+  domains: [__HOST__]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: remediator
+  namespace: otel-demo
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: otel-demo-remediator
+    networking.gke.io/managed-certificates: remediator
+    kubernetes.io/ingress.allow-http: "false"
+spec:
+  defaultBackend:
+    service: {name: remediator, port: {number: 8080}}

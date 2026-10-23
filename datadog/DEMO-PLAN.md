@@ -76,9 +76,29 @@ for each. Stage mode only, so the hourly schedule never fights it.
 
 No Private Action Runner (Matthew, 2026-10-23: it is Agent-based). A first build used one; it
 was removed the same day (CHANGES.md). Without it, Datadog cannot reach into the cluster, so
-something of ours does the Kubernetes work. Options put to Matthew:
-- **A.** A remediator pod of our own that polls the monitor through the Datadog API and acts.
-- **B.** Workflow Automation calling a small public endpoint of ours over HTTPS.
+something of ours does the Kubernetes work. Matthew chose (2026-10-23) Workflow Automation calling
+a small public endpoint of ours over HTTPS (over a remediator that polls Datadog).
+
+Design:
+- **`remediator`** (`local/remediator.yaml`): a stdlib Python service in `otel-demo` with three
+  narrow endpoints: `GET /stage` (stage mode, flag, ad's CPU limit), `POST /lift-cpu-limit`,
+  `POST /rollback-flag`. Each action refuses outside stage mode and posts a change event
+  (`service:ad`, like `scenarios`). Kubernetes access through a Role: get and patch on deployments
+  in `otel-demo` only.
+- **Exposure, in layers:** a GKE Ingress on a reserved global static IP, HTTPS with a
+  Google-managed certificate for `<ip>.sslip.io` (no DNS zone needed); a Cloud Armor policy that
+  admits only Datadog's `webhooks` IP ranges for the site (three /25s on datad0g.com); a bearer
+  token, random per cluster, in a Kubernetes secret and in a Datadog token-auth HTTP connection,
+  never in git or in the workflow.
+- **Workflow** (`local/datadog/workflow-remediate-ad.json`, applied by `dd-apply.py`): monitor
+  trigger, `GET /stage`, then if in stage mode `POST /lift-cpu-limit`, wait 120 s,
+  `POST /rollback-flag`. The monitor mentions it on Alert.
+- `up.sh` reserves the IP, creates the Cloud Armor policy and the token if missing, and applies it.
+
+Status 2026-10-23: built and verified. Run by hand in stage mode, every step succeeded and p95
+went from about 102 ms to 7 to 15 ms; outside stage mode it checks and stops. Started by the monitor itself on cue, the whole
+loop (alert, lift, rollback, monitor OK) took about 7.5 minutes. Requests from
+outside Datadog's ranges get 403 from Cloud Armor; without the token, 401.
 
 Measured 2026-10-22 and still true for either: raising the limit does not fix latency (2 cores:
 p95 18 to 46 ms, the pod at 1.8 cores; the four load threads take any ceiling), and without an

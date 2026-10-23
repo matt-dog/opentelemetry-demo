@@ -103,6 +103,34 @@ ships with, through OTLP, with no Datadog Agent.
 http://localhost:8080/jaeger/ui (port-forward above), search the trace ID of the
 Kafka trace. Same 44 spans, same DDOT SDK span: the data is standard OTLP.
 
+## Act 3: the fix, automatically
+
+No click needed: the monitor from step 1 starts a Datadog workflow when it alerts.
+[Workflow](https://app.datad0g.com/workflow/d0eecab0-b4b3-4d35-b717-2a43164e32a9)
+
+1. **Symptom first.** The workflow calls the cluster's remediator, which lifts ad's CPU limit.
+   Throttling stops and p95 drops from about 100 ms to under 15 ms within a minute. The service
+   page shows the change event "Workflow lifted ad CPU limit (ad)".
+2. **Then the cause.** Two minutes later it rolls back `adHighCpu`, the change the event on the
+   monitor named: "Workflow rolled back adHighCpu to off (ad)". The monitor recovers.
+
+What to say: nothing Datadog runs in the cluster for this. The workflow calls a small endpoint
+of ours over HTTPS, open only to Datadog's published webhook IP ranges and holding a token
+Datadog keeps in a connection. The endpoint can do three narrow things and nothing else.
+
+Worth saying out loud: raising the limit is not the fix. The load threads take any CPU they are
+given (measured: at 2 cores p95 was still 18 to 46 ms), so the workflow lifts the limit only to
+buy time, and the rollback is what ends it.
+
+Rehearsed 2026-10-23, untouched after the cue: `stage.sh start` 17:18:24, flag event 17:19:06,
+monitor Alert and workflow start about 2.5 min after the cue, limit lifted 17:20:48, flag rolled
+back 17:22:49, monitor OK 17:25:54 (about 7.5 min after the cue). So for a live run: cue, Act 1
+(the monitor is already alerting by step 1), and Act 3 plays out on its own about 4 minutes later.
+Keep the monitor or service page open to show it.
+
+`stage.sh stop` puts ad's 300m limit back. Outside stage mode (the hourly schedule) the workflow
+checks and does nothing.
+
 ## Side trips, all without an Agent
 
 | Topic | Link | What to say |

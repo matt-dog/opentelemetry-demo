@@ -122,22 +122,43 @@ kubectl -n "$NS" wait --for=condition=Ready pods --all --timeout=600s >/dev/null
   || echo "some pods are not Ready yet: kubectl -n $NS get pods" >&2
 
 # ---- failure scenarios for error traces -------------------------------------------
-# flagd reads this file live. It resets when the flagd pod restarts; rerun up.sh.
+# They reset when the flagd pod restarts; rerun up.sh.
 echo "Setting feature flags: paymentFailure 50%, cartFailure 100%, productCatalogFailure on"
-flags="$(mktemp)"
-kubectl -n "$NS" exec deploy/flagd -c flagd-ui -- cat /app/data/demo.flagd.json >"$flags"
-# Edit a copy and write it back whole, so a failure never leaves flagd an empty file.
-python3 - "$flags" <<'PY'
-import json, sys
-d = json.load(open(sys.argv[1])); f = d["flags"]
-f["paymentFailure"]["defaultVariant"] = "50%"
-f["cartFailure"]["defaultVariant"] = "100%"
-# The shipped rule returns "off" on both branches, so the flag can never fire.
-f["productCatalogFailure"]["targeting"] = {"if": [{"==": [{"var": "product_id"}, "OLJCESPC7Z"]}, "on", "off"]}
-json.dump(d, open(sys.argv[1] + ".new", "w"), indent=2)
-PY
-kubectl -n "$NS" exec -i deploy/flagd -c flagd-ui -- sh -c 'cat > /app/data/demo.flagd.json' <"$flags.new"
-rm -f "$flags" "$flags.new"
+# Through flagd-ui's API (flags.py); it does not see edits to flagd's file.
+python3 "$HERE/flags.py" set paymentFailure=50% cartFailure=100%
+python3 "$HERE/flags.py" target-product OLJCESPC7Z
+
+# ---- Act 3: the remediator, called by Datadog Workflow Automation (GKE only) --------
+# HTTPS on a reserved static IP with a Google-managed certificate for <ip>.sslip.io,
+# Cloud Armor admitting only Datadog's webhooks IP ranges for the site, and a bearer
+# token (remediator-token secret; Datadog keeps it in a token-auth connection). See
+# remediator.yaml and DEMO-PLAN.md. Then dd-apply.py again for the connection and the
+# workflow. The certificate takes 10 to 60 minutes the first time.
+if [ "$TARGET" = gke ]; then
+  gca() { gcloud compute "$@" --project "$GCP_PROJECT" --quiet; }
+  gca addresses describe otel-demo-remediator --global >/dev/null 2>&1 \
+    || gca addresses create otel-demo-remediator --global >/dev/null
+  rem_ip="$(gca addresses describe otel-demo-remediator --global --format='value(address)')"
+  rem_host="${rem_ip//./-}.sslip.io"
+  ranges="$(curl -s "https://ip-ranges.$DD_SITE/" | python3 -c "import json,sys; print(','.join(json.load(sys.stdin)['webhooks']['prefixes_ipv4']))")"
+  gca security-policies describe otel-demo-remediator >/dev/null 2>&1 \
+    || gca security-policies create otel-demo-remediator --description "otel-demo remediator: Datadog webhooks IP ranges only" >/dev/null
+  if gca security-policies rules describe 1000 --security-policy otel-demo-remediator >/dev/null 2>&1; then
+    gca security-policies rules update 1000 --security-policy otel-demo-remediator --src-ip-ranges "$ranges" --action allow >/dev/null
+  else
+    gca security-policies rules create 1000 --security-policy otel-demo-remediator --src-ip-ranges "$ranges" --action allow >/dev/null
+  fi
+  gca security-policies rules update 2147483647 --security-policy otel-demo-remediator --action deny-403 >/dev/null
+  kubectl -n "$NS" get secret remediator-token >/dev/null 2>&1 \
+    || kubectl -n "$NS" create secret generic remediator-token \
+         --from-literal=token="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >/dev/null
+  sed "s/__HOST__/$rem_host/g" "$HERE/remediator.yaml" | kubectl apply -f - >/dev/null
+  echo "Remediator at https://$rem_host (Datadog webhooks ranges only); applying its connection and workflow"
+  DD_API_KEY="$DD_API_KEY" DD_APP_KEY="$DD_APP_KEY" DD_SITE="$DD_SITE" ENV_NAME="$ENV_NAME" \
+    REMEDIATOR_URL="https://$rem_host" \
+    REMEDIATOR_TOKEN="$(kubectl -n "$NS" get secret remediator-token -o jsonpath='{.data.token}' | base64 -d)" \
+    python3 "$HERE/dd-apply.py" | grep -E "workflow|connection" || true
+fi
 
 cat <<MSG
 

@@ -89,6 +89,8 @@ Delete the GKE cluster when done:
   (where from, and why, in its README).
 - `contrib-collector.yaml`: the upstream Collector for PostgreSQL, Redis and Kafka metrics; `up.sh` applies it.
 - `stage.sh`: starts and stops the Act 1 problem on cue (`start`, `stop`, `status`).
+- `flags.py`: reads and sets feature flags through flagd-ui's API, the only safe way (`get`, `set`, `target-product`).
+- `remediator.yaml`: Act 3's endpoint for Datadog Workflow Automation, with its Ingress, certificate and Cloud Armor link.
 - `up.sh`: runs the installer and the demo chart against a kubeconfig holding
   only the target cluster, then sets the failure flags.
 

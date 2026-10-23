@@ -1,0 +1,67 @@
+{
+  "name": "[otel demo] remediate ad latency (${ENV_NAME})",
+  "description": "Act 3 of DEMO-SCRIPT.md, started by the ad latency monitor. Calls the cluster's remediator: in stage mode only, lift ad's CPU limit (the symptom), wait, then roll back the adHighCpu flag (the cause).",
+  "spec": {
+    "handle": "otel-demo-remediate-ad",
+    "triggers": [
+      {"monitorTrigger": {"rateLimit": {"count": 1, "interval": "600s"}}, "startStepNames": ["Check_stage"]},
+      {"apiTrigger": {}, "startStepNames": ["Check_stage"]}
+    ],
+    "connectionEnvs": [
+      {"env": "default", "connections": [
+        {"connectionId": "${REMEDIATOR_CONNECTION_ID}", "label": "INTEGRATION_REMEDIATOR"}
+      ]}
+    ],
+    "steps": [
+      {
+        "name": "Check_stage",
+        "actionId": "com.datadoghq.http.request",
+        "connectionLabel": "INTEGRATION_REMEDIATOR",
+        "parameters": [
+          {"name": "verb", "value": "GET"},
+          {"name": "url", "value": "${REMEDIATOR_URL}/stage"},
+          {"name": "responseParsing", "value": "json"}
+        ],
+        "outboundEdges": [{"branchName": "main", "nextStepName": "Stage_mode"}]
+      },
+      {
+        "name": "Stage_mode",
+        "actionId": "com.datadoghq.core.if",
+        "parameters": [
+          {"name": "joinOperator", "value": "and"},
+          {"name": "conditions", "value": [
+            {"comparisonOperator": "eq", "leftValue": "{{ Steps.Check_stage.body.stage_mode }}", "rightValue": true}
+          ]}
+        ],
+        "outboundEdges": [{"branchName": "true", "nextStepName": "Lift_cpu_limit"}]
+      },
+      {
+        "name": "Lift_cpu_limit",
+        "actionId": "com.datadoghq.http.request",
+        "connectionLabel": "INTEGRATION_REMEDIATOR",
+        "parameters": [
+          {"name": "verb", "value": "POST"},
+          {"name": "url", "value": "${REMEDIATOR_URL}/lift-cpu-limit"},
+          {"name": "responseParsing", "value": "json"}
+        ],
+        "outboundEdges": [{"branchName": "main", "nextStepName": "Wait_for_recovery"}]
+      },
+      {
+        "name": "Wait_for_recovery",
+        "actionId": "com.datadoghq.core.sleep",
+        "parameters": [{"name": "durationSeconds", "value": 120}],
+        "outboundEdges": [{"branchName": "main", "nextStepName": "Rollback_flag"}]
+      },
+      {
+        "name": "Rollback_flag",
+        "actionId": "com.datadoghq.http.request",
+        "connectionLabel": "INTEGRATION_REMEDIATOR",
+        "parameters": [
+          {"name": "verb", "value": "POST"},
+          {"name": "url", "value": "${REMEDIATOR_URL}/rollback-flag"},
+          {"name": "responseParsing", "value": "json"}
+        ]
+      }
+    ]
+  }
+}

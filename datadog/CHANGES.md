@@ -28,6 +28,27 @@ into git or undone.
 
 ## Log
 
+### 2026-10-23 · Act 3 rebuilt on Workflow Automation calling our remediator; flags only through flagd-ui's API
+- **What:**
+  - `local/remediator.yaml`: a stdlib Python endpoint (stage check, lift ad's CPU limit, roll back
+    `adHighCpu`; actions only in stage mode; change events) behind a GKE Ingress with a
+    Google-managed certificate, a Cloud Armor policy admitting only Datadog's webhooks ranges, and
+    a bearer token. `up.sh` (GKE) reserves the IP, sets the policy and token, applies it.
+  - `dd-apply.py`: the token-auth connection and the workflow (`workflow-remediate-ad.json`,
+    monitor and API triggers). The latency monitor mentions it on Alert.
+  - `local/flags.py`: every flag change through flagd-ui's API; `up.sh` and `stage.sh` use it.
+- **Why:**
+  - No Private Action Runner (Agent-based). Matthew chose a workflow calling our endpoint.
+  - flagd-ui keeps flags in memory and ignores edits to flagd's file; `up.sh` and `stage.sh` edited
+    the file and the scenarios pod's next API write put the stale copy back. So `up.sh`'s failure
+    flags (cartFailure 100%, the productCatalogFailure rule) had not been in effect, and a
+    remediation read could disagree with `stage.sh`. `paymentFailure` is owned by the schedule
+    (25% from :00 to :10), so `up.sh`'s 50% never held either way.
+  - Change events accept `changed_resource.type` feature_flag, configuration or anomaly only.
+- **Verified:** workflow run in stage mode, every step succeeded, p95 102 ms to 7 to 15 ms; outside
+  stage mode it stops at the check; Cloud Armor 403 from outside, 401 without the token; flag
+  file, API and remediator agree after `stage.sh` and `flags.py`.
+
 ### 2026-10-23 · Private Action Runner removed; Mosaic flag on
 - **What:** the runner (Helm release `par`), its two connections and the remediation workflow
   deleted; `par-values.yaml` and `workflow-remediate-ad.json` removed; the monitor no longer
