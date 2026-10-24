@@ -29,6 +29,22 @@ into git or undone.
 
 ## Log
 
+### 2026-10-24 · imageSlowLoad scheduled; resolve-incident workflow built (off); problem-pattern test
+- **What:** `scenarios.yaml` adds imageSlowLoad 5s from :46 to :52 (change events on frontend).
+  `workflows/resolve-ad-incident.json` (new) and `workflows/remediate-ad.json` (moved from
+  `workflow-remediate-ad.json`); `dd-apply.py` applies every file in `workflows/`, needs the
+  remediator connection only for workflows that call it, and runs workflows before monitors.
+  `apply_slo` now matches by the `managed_by` tag and exact name.
+- **Why:** more problem patterns for the unattended demo, and incidents that open and close with
+  the alert (DEMO-PLAN.md). The SLO name search missed names starting with "[", so a rerun
+  created duplicates (two deleted the same minute).
+- **Verified:** test of five flags at once (results in DEMO-PLAN.md, Problem patterns); the new
+  schedule loaded and set paymentFailure at 05:00 UTC; two reruns of `dd-apply.py` left exactly
+  two SLOs. The resolve workflow is published but no monitor mentions it yet.
+- **Live, undone:** a stalled test left paymentFailure, kafkaQueueProblems,
+  productCatalogLockContention, imageSlowLoad and intlShippingSlowdown on, with the schedule
+  paused, from 02:29 to 04:52 UTC; graphs show it. Reset at 04:52.
+
 ### 2026-10-23 · SLOs and an error-rate monitor for the ad service
 - **What:** `local/datadog/slos/ad-latency.json` (time slice: per-minute p95 under 20 ms, 99%, 7d),
   `slos/ad-availability.json` (hits minus errors over hits, 99.9%, 7d) and

@@ -33,6 +33,7 @@ Built from git by `local/dd-apply.py` (run by `up.sh`), matched by name, tagged
 | Monitor `[otel demo] ad service latency anomaly (otel-demo)` | 35241062 | created 2026-10-22; needs about a day of history before its baseline is trustworthy |
 | Monitor `[otel demo] ad service p95 latency high (otel-demo)` (per-minute p95 over 20 ms) | 35243022 | created 2026-10-22; Act 1's alert. Replaced the 50 ms monitor 35241065 (deleted), which stayed OK through the problem |
 | Workflow `[otel demo] remediate ad latency (otel-demo)`, handle `@workflow-otel-demo-remediate-ad` | `d0eecab0-b4b3-4d35-b717-2a43164e32a9` | 2026-10-23; started by the latency monitor on Alert; acts only in stage mode; declares an incident (SEV-3, services: ad) and resolves it at the end |
+| Workflow `[otel demo] resolve ad incident (otel-demo)`, handle `@workflow-otel-demo-resolve-ad-incident` | `41205ee4-70f2-4b21-9e3e-db102d7ccfac` | 2026-10-24; published but not mentioned by any monitor yet (off until an Incident Management seat exists) |
 | Incident Management | first incident #1 on 2026-10-23, declared by the workflow | resolving needs an Incident Management seat for the workflow's owner (403 "Seat Required" without one); creating does not |
 | HTTP connection `otel-demo remediator` (token auth) | `d9d26ff3-d299-47af-ac63-ffae3e0bd217` | 2026-10-23; holds the remediator token |
 | Monitor `[otel demo] ad service error rate (otel-demo)` (errors over hits above 5%, 10 min) | 35274708 | created 2026-10-23; service health next to the latency monitor |
@@ -64,7 +65,7 @@ in `CHANGES.md` when it is turned on.
 | Namespace | `otel-demo` |
 | Collectors | DDOT daemon (one per node), DDOT cluster, DDOT Host Profiler (one per node), all in `opentelemetry-operator-system`; upstream `contrib` (collector-contrib 0.161.0) in `otel-demo` |
 | Remediator (Act 3) | `https://34-54-251-237.sslip.io`: GKE Ingress on the global static IP `otel-demo-remediator` (34.54.251.237), Google-managed certificate, Cloud Armor policy `otel-demo-remediator` (Datadog webhooks ranges only), token in secret `remediator-token` |
-| Problem schedule | `scenarios` pod: paymentFailure :00 to :10, aiRunawayAgent :15 to :25, adHighCpu :30 to :45 each hour, UTC; `local/stage.sh` pauses it for a live demo |
+| Problem schedule | `scenarios` pod: paymentFailure 25% :00 to :10, aiRunawayAgent :15 to :25, adHighCpu :30 to :45, imageSlowLoad 5s :46 to :52, each hour, UTC; `local/stage.sh` pauses it for a live demo. cartFailure stays at 100% all the time (set by `up.sh`) |
 | Local | Rancher Desktop, context `rancher-desktop`, about 12 GB for the VM |
 
 Created 2026-10-22 by `up.sh gke`. It replaced `otel-demo-blog` (sent to ddstaging)

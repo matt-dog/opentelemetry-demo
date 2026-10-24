@@ -1,0 +1,42 @@
+{
+  "name": "[otel demo] resolve ad incident (${ENV_NAME})",
+  "description": "Started by the ad latency monitor on recovery: resolves the most recent active ad incident, so incidents live exactly as long as the alert. Off until mentioned by the monitor (needs an Incident Management seat); see DEMO-PLAN.md.",
+  "spec": {
+    "handle": "otel-demo-resolve-ad-incident",
+    "triggers": [
+      {"monitorTrigger": {}, "startStepNames": ["Find_incident"]},
+      {"apiTrigger": {}, "startStepNames": ["Find_incident"]}
+    ],
+    "steps": [
+      {
+        "name": "Find_incident",
+        "actionId": "com.datadoghq.dd.incidents.searchIncidents",
+        "parameters": [
+          {"name": "query", "value": "state:(active OR stable) services:ad"},
+          {"name": "sort", "value": "-created"},
+          {"name": "page_size", "value": 1}
+        ],
+        "outboundEdges": [{"branchName": "main", "nextStepName": "Any_open"}]
+      },
+      {
+        "name": "Any_open",
+        "actionId": "com.datadoghq.core.if",
+        "parameters": [
+          {"name": "joinOperator", "value": "and"},
+          {"name": "conditions", "value": [
+            {"comparisonOperator": "notempty", "value": "{{ Steps.Find_incident.data.attributes.incidents }}"}
+          ]}
+        ],
+        "outboundEdges": [{"branchName": "true", "nextStepName": "Resolve_incident"}]
+      },
+      {
+        "name": "Resolve_incident",
+        "actionId": "com.datadoghq.dd.incidents.updateIncident",
+        "parameters": [
+          {"name": "incident_id", "value": "{{ Steps.Find_incident.data.attributes.incidents[0].data.id }}"},
+          {"name": "fields", "value": {"state": {"type": "dropdown", "value": "resolved"}}}
+        ]
+      }
+    ]
+  }
+}

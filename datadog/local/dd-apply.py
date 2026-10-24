@@ -153,18 +153,21 @@ def apply_connection(env):
 
 
 def apply_workflow(path, env):
-    """Create or update the remediation workflow (matched by name) and publish it. It calls
-    the cluster's remediator through the token-auth HTTP connection "<env> remediator"
-    (up.sh creates both and passes REMEDIATOR_URL). safe_substitute, because the
-    workflow's expressions use {{ }} and could use $."""
-    url = os.environ.get("REMEDIATOR_URL")
-    _, conns = call("GET", "/api/v2/actions/connections")
-    by_name = {c["attributes"]["name"]: c["id"] for c in (conns or {}).get("data", [])}
-    if not url or f"{env} remediator" not in by_name:
-        print(f"workflow skipped: needs REMEDIATOR_URL and a connection named '{env} remediator'")
-        return
-    wf = json.loads(string.Template(path.read_text()).safe_substitute(
-        ENV_NAME=env, REMEDIATOR_URL=url, REMEDIATOR_CONNECTION_ID=by_name[f"{env} remediator"]))
+    """Create or update a workflow from workflows/ (matched by name) and publish it. One that
+    calls the cluster's remediator uses the token-auth connection "<env> remediator" and
+    REMEDIATOR_URL (up.sh passes both); others need neither. safe_substitute, because the
+    workflows' expressions use {{ }}."""
+    text = path.read_text()
+    values = {"ENV_NAME": env}
+    if "${REMEDIATOR_" in text:
+        url = os.environ.get("REMEDIATOR_URL")
+        _, conns = call("GET", "/api/v2/actions/connections")
+        by_name = {c["attributes"]["name"]: c["id"] for c in (conns or {}).get("data", [])}
+        if not url or f"{env} remediator" not in by_name:
+            print(f"workflow skipped ({path.name}): needs REMEDIATOR_URL and a connection named '{env} remediator'")
+            return
+        values.update(REMEDIATOR_URL=url, REMEDIATOR_CONNECTION_ID=by_name[f"{env} remediator"])
+    wf = json.loads(string.Template(text).safe_substitute(values))
     attrs = {"name": wf["name"], "description": wf["description"], "spec": wf["spec"],
              "published": True, "tags": [f"env:{env}", "service:ad", TAG]}
     _, found = call("GET", "/api/v2/workflows?" + urllib.parse.urlencode({"filter[query]": wf["name"]}))
@@ -182,7 +185,8 @@ def apply_slo(s):
     """Create or update an SLO, matched by name and tagged like the monitors. Prints the API's
     error text when one is refused, since a malformed SLO otherwise fails silently."""
     s["tags"] = sorted(set(s.get("tags", [])) | {TAG})
-    _, found = call("GET", "/api/v1/slo?" + urllib.parse.urlencode({"query": s["name"], "limit": 50}))
+    # Match by tag and exact name: the name search doesn't find names starting with "[".
+    _, found = call("GET", "/api/v1/slo?" + urllib.parse.urlencode({"tags_query": TAG, "limit": 1000}))
     same = [x for x in (found or {}).get("data") or [] if x["name"] == s["name"]]
     method, path = ("PUT", f"/api/v1/slo/{same[0]['id']}") if same else ("POST", "/api/v1/slo")
     req = urllib.request.Request(API + path, method=method, data=json.dumps(s).encode(),
@@ -209,8 +213,10 @@ def main():
     steps = [("log index", lambda: apply_index(load(HERE / "log-index.json", env))),
              ("RUM application", lambda: apply_rum(load(HERE / "rum-application.json", env), os.environ.get("RUM_OUT"))),
              ("retention filter", lambda: apply_retention(load(HERE / "retention-filter.json", env))),
-             ("remediator connection", lambda: apply_connection(env)),
-             ("workflow", lambda: apply_workflow(HERE / "workflow-remediate-ad.json", env))]
+             ("remediator connection", lambda: apply_connection(env))]
+    # Workflows before monitors: a monitor may mention one.
+    steps += [(f"workflow {f.name}", lambda f=f: apply_workflow(f, env))
+              for f in sorted((HERE / "workflows").glob("*.json"))]
     steps += [(f"monitor {f.name}", lambda f=f: apply_monitor(load(f, env)))
               for f in sorted((HERE / "monitors").glob("*.json"))]
     steps += [(f"SLO {f.name}", lambda f=f: apply_slo(load(f, env)))

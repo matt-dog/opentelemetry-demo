@@ -22,7 +22,8 @@ data:
     [
       {"flag": "paymentFailure", "variant": "25%", "minutes": [0, 10], "service": "payment"},
       {"flag": "aiRunawayAgent", "variant": "on", "minutes": [15, 25], "service": "agent"},
-      {"flag": "adHighCpu", "variant": "on", "minutes": [30, 45], "service": "ad"}
+      {"flag": "adHighCpu", "variant": "on", "minutes": [30, 45], "service": "ad"},
+      {"flag": "imageSlowLoad", "variant": "5sec", "minutes": [46, 52], "service": "frontend"}
     ]
   scenarios.py: |
     import json, os, time, urllib.request

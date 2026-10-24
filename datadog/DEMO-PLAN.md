@@ -121,6 +121,36 @@ explicit request Kubernetes sets request equal to limit, so a high limit cannot 
   in the problem windows and 12 were false alarms. The hourly schedule also teaches a seasonal
   algorithm that the spike is normal. The threshold monitor leads until that is resolved.
 
+## Problem patterns (tested 2026-10-24)
+
+Five flags ran together for about 2h20m (02:29 to 04:52 UTC, after a test script stalled), each
+compared with the hour before:
+
+| Flag | Result | Story |
+|---|---|---|
+| `adHighCpu` | works (main flow) | monitor, trace, CPU limit, logs, profile, workflow |
+| `paymentFailure` 25% | works: payment error rate 7% to 26% | Error Tracking: exception with stack |
+| `imageSlowLoad` 5s | works in the browser: RUM image load p95 0.14 s to 5.09 s | RUM: slow page, user impact |
+| `aiRunawayAgent` | scheduled since 2026-10-19 | LLM Observability |
+| `cartFailure` 100% | on all the time | errors inside a successful checkout |
+| `intlShippingSlowdown` 5s | evaluated, no effect: only international orders, and the shoppers order domestically | needs an international order |
+| `kafkaQueueProblems` | no consumer lag seen; not evaluated in the window (orders may not have flowed) | needs a focused retest |
+| `productCatalogLockContention` | never evaluated, though the 3.1.0 loop should check it every 10 s | needs code-level digging |
+
+Scheduled now: paymentFailure, aiRunawayAgent, adHighCpu, imageSlowLoad (ENVIRONMENT.md).
+
+## Incidents, unattended (built, off)
+
+Goal: an incident lives exactly as long as the latency alert, so the unattended demo shows real
+time-to-detect and time-to-resolve and service health returns to OK between windows. Needs an
+Incident Management seat for Matthew (the workflows' owner). To switch on:
+1. In `workflows/remediate-ad.json`, move `Declare_incident` ahead of `Stage_mode` (declare on
+   every alert; remediation stays stage-only, since the schedule would re-enable the flag).
+2. Add `{{#is_recovery}}@workflow-otel-demo-resolve-ad-incident{{/is_recovery}}` to the latency
+   monitor's message; `workflows/resolve-ad-incident.json` resolves the newest active ad incident.
+3. Resolve incidents #1 and #2 (left open by the 2026-10-23 test).
+About 24 incidents a day, all resolved; open them every few hours instead if that is too many.
+
 ## Known limits
 
 - The collector images are dev builds pinned by the kube-stack ddot flow, not released
