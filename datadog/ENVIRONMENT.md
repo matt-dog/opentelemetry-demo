@@ -63,6 +63,7 @@ in `CHANGES.md` when it is turned on.
 | GKE cluster | `otel-demo`, project `dd-dev-otelpmdev`, zone `us-east1-b` |
 | Nodes | 3 x `e2-standard-4`, network `ddot-lab`, subnet `ddot-lab-us-east1`, label `purpose=otel-demo` |
 | Namespace | `otel-demo` |
+| GKE maintenance window | daily 06:00 to 10:00 UTC (set 2026-10-24, and by `up.sh gke`); GKE's automatic upgrades recreate every node, so they stay out of demo hours |
 | Collectors | DDOT daemon (one per node), DDOT cluster, DDOT Host Profiler (one per node), all in `opentelemetry-operator-system`; upstream `contrib` (collector-contrib 0.161.0) in `otel-demo` |
 | Remediator (Act 3) | `https://34-54-251-237.sslip.io`: GKE Ingress on the global static IP `otel-demo-remediator` (34.54.251.237), Google-managed certificate, Cloud Armor policy `otel-demo-remediator` (Datadog webhooks ranges only), token in secret `remediator-token` |
 | Problem schedule | `scenarios` pod: paymentFailure 25% :00 to :10, aiRunawayAgent :15 to :25, adHighCpu :30 to :45, imageSlowLoad 5s :46 to :52, each hour, UTC; `local/stage.sh` pauses it for a live demo. cartFailure 100% and the productCatalogFailure rule are held by the same pod (`baseline.json`), so they survive a flagd restart |

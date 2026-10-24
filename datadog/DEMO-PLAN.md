@@ -147,7 +147,7 @@ pin a past one. `stage.sh` is now for testing changes only. Incidents follow opt
 open for ad, never resolved) until there is an Incident Management seat. The scheduler holds
 the baseline flags, so a flagd restart (for example a GKE node upgrade) no longer loses them.
 GKE upgrades the cluster automatically (REGULAR channel) and recreated every node at 17:26 UTC on
-2026-10-24; a maintenance window would keep that out of demo hours. Open issues: CHANGES.md,
+2026-10-24; upgrades are now held to a daily 06:00 to 10:00 UTC maintenance window. Open issues: CHANGES.md,
 2026-10-24, Shared, always-on demo.
 
 ## Incidents, unattended (built, off)

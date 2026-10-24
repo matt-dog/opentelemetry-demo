@@ -44,6 +44,11 @@ case "$TARGET" in
         --labels purpose=otel-demo --quiet >/dev/null
     fi
     gc get-credentials "$GKE_CLUSTER" >/dev/null 2>&1   # writes only to $KUBECONFIG
+    # GKE upgrades automatically (REGULAR channel) and recreates every node when it does; keep it
+    # to 06:00 to 10:00 UTC daily, outside demo hours (GKE needs 48 h of windows per 32 days).
+    gc update "$GKE_CLUSTER" --maintenance-window-start 2026-10-25T06:00:00Z \
+      --maintenance-window-end 2026-10-25T10:00:00Z --maintenance-window-recurrence FREQ=DAILY \
+      --quiet >/dev/null 2>&1 || echo "could not set the maintenance window" >&2
     ENV_NAME=otel-demo; CLUSTER_TYPE=gcp
     # GKE nodes meet the eBPF profiler's needs (kernel >= 5.10, Kubernetes >= 1.30).
     HOST_PROFILER="${DD_HOST_PROFILER_ENABLED:-true}" ;;

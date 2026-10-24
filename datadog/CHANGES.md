@@ -29,6 +29,14 @@ into git or undone.
 
 ## Log
 
+### 2026-10-24 · GKE maintenance window; presenter script updated for the shared demo
+- **What:** the cluster's maintenance window is daily 06:00 to 10:00 UTC (`gcloud container clusters
+  update`, also run by `up.sh gke`). The Google Doc script lost its stage.sh setup: presenters use
+  the live :30 to :45 window or pin the last one; step 3 and step 10 match the current workflow.
+- **Why:** GKE's automatic upgrade recreated all nodes at 17:26 UTC mid-demo window (entry below).
+  GKE needs at least 48 hours of maintenance windows per 32 days, so a weekly 4-hour slot is
+  refused; daily 4 hours is the smallest regular shape outside both US and EU working hours.
+
 ### 2026-10-24 · Workflow simplified; scheduler retries failed edges and holds the baseline flags
 - **What:** `workflows/remediate-ad.json` drops the CPU-limit lift and restore: open an incident if
   none is open for ad, wait 3 min, roll back adHighCpu. `scenarios.yaml` marks an edge done only
