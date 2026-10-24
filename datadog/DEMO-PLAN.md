@@ -139,6 +139,14 @@ compared with the hour before:
 
 Scheduled now: paymentFailure, aiRunawayAgent, adHighCpu, imageSlowLoad (ENVIRONMENT.md).
 
+## Shared demo (2026-10-24)
+
+No stage mode: the demo serves many presenters at once, any time. Everything runs on the hourly
+clock, the workflow acts on every alert, and presenters either catch the live :30 to :45 window or
+pin a past one. `stage.sh` is now for testing changes only. Incidents follow option B (at most one
+open for ad, never resolved) until there is an Incident Management seat. Open issues: CHANGES.md,
+2026-10-24, Shared, always-on demo.
+
 ## Incidents, unattended (built, off)
 
 Goal: an incident lives exactly as long as the latency alert, so the unattended demo shows real

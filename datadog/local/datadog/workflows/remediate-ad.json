@@ -1,6 +1,6 @@
 {
   "name": "[otel demo] remediate ad latency (${ENV_NAME})",
-  "description": "Act 3 of DEMO-SCRIPT.md, started by the ad latency monitor. In stage mode only: declare an incident, lift ad's CPU limit (the symptom), wait, roll back adHighCpu (the cause), resolve the incident.",
+  "description": "Act 3, on every ad latency alert (shared demo, no stage mode): open an incident if none is open, wait 6 min, lift ad's CPU limit, wait 3 min, roll back adHighCpu, then restore the limit.",
   "spec": {
     "handle": "otel-demo-remediate-ad",
     "triggers": [
@@ -8,17 +8,17 @@
         "monitorTrigger": {
           "rateLimit": {
             "count": 1,
-            "interval": "600s"
+            "interval": "1200s"
           }
         },
         "startStepNames": [
-          "Check_stage"
+          "Find_open_incident"
         ]
       },
       {
         "apiTrigger": {},
         "startStepNames": [
-          "Check_stage"
+          "Find_open_incident"
         ]
       }
     ],
@@ -35,32 +35,27 @@
     ],
     "steps": [
       {
-        "name": "Check_stage",
-        "actionId": "com.datadoghq.http.request",
-        "connectionLabel": "INTEGRATION_REMEDIATOR",
+        "name": "Find_open_incident",
+        "actionId": "com.datadoghq.dd.incidents.searchIncidents",
         "parameters": [
           {
-            "name": "verb",
-            "value": "GET"
+            "name": "query",
+            "value": "state:(active OR stable) services:ad"
           },
           {
-            "name": "url",
-            "value": "${REMEDIATOR_URL}/stage"
-          },
-          {
-            "name": "responseParsing",
-            "value": "json"
+            "name": "page_size",
+            "value": 1
           }
         ],
         "outboundEdges": [
           {
             "branchName": "main",
-            "nextStepName": "Stage_mode"
+            "nextStepName": "None_open"
           }
         ]
       },
       {
-        "name": "Stage_mode",
+        "name": "None_open",
         "actionId": "com.datadoghq.core.if",
         "parameters": [
           {
@@ -71,9 +66,8 @@
             "name": "conditions",
             "value": [
               {
-                "comparisonOperator": "eq",
-                "leftValue": "{{ Steps.Check_stage.body.stage_mode }}",
-                "rightValue": true
+                "comparisonOperator": "empty",
+                "value": "{{ Steps.Find_open_incident.data.attributes.incidents }}"
               }
             ]
           }
@@ -82,6 +76,10 @@
           {
             "branchName": "true",
             "nextStepName": "Declare_incident"
+          },
+          {
+            "branchName": "false",
+            "nextStepName": "Wait_before_fix"
           }
         ]
       },
@@ -128,9 +126,28 @@
         "outboundEdges": [
           {
             "branchName": "main",
-            "nextStepName": "Lift_cpu_limit"
+            "nextStepName": "Wait_before_fix"
           }
         ]
+      },
+      {
+        "name": "Wait_before_fix",
+        "actionId": "com.datadoghq.core.sleep",
+        "parameters": [
+          {
+            "name": "durationSeconds",
+            "value": 360
+          }
+        ],
+        "outboundEdges": [
+          {
+            "branchName": "main",
+            "nextStepName": "Lift_cpu_limit"
+          }
+        ],
+        "readinessGate": {
+          "thresholdType": "ANY"
+        }
       },
       {
         "name": "Lift_cpu_limit",
@@ -163,7 +180,7 @@
         "parameters": [
           {
             "name": "durationSeconds",
-            "value": 120
+            "value": 180
           }
         ],
         "outboundEdges": [
@@ -194,26 +211,42 @@
         "outboundEdges": [
           {
             "branchName": "main",
-            "nextStepName": "Resolve_incident"
+            "nextStepName": "Wait_before_restore"
           }
         ]
       },
       {
-        "name": "Resolve_incident",
-        "actionId": "com.datadoghq.dd.incidents.updateIncident",
+        "name": "Wait_before_restore",
+        "actionId": "com.datadoghq.core.sleep",
         "parameters": [
           {
-            "name": "incident_id",
-            "value": "{{ Steps.Declare_incident.incident_uuid }}"
+            "name": "durationSeconds",
+            "value": 60
+          }
+        ],
+        "outboundEdges": [
+          {
+            "branchName": "main",
+            "nextStepName": "Restore_cpu_limit"
+          }
+        ]
+      },
+      {
+        "name": "Restore_cpu_limit",
+        "actionId": "com.datadoghq.http.request",
+        "connectionLabel": "INTEGRATION_REMEDIATOR",
+        "parameters": [
+          {
+            "name": "verb",
+            "value": "POST"
           },
           {
-            "name": "fields",
-            "value": {
-              "state": {
-                "type": "dropdown",
-                "value": "resolved"
-              }
-            }
+            "name": "url",
+            "value": "${REMEDIATOR_URL}/restore-cpu-limit"
+          },
+          {
+            "name": "responseParsing",
+            "value": "json"
           }
         ]
       }

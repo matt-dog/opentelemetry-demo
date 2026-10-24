@@ -4,10 +4,11 @@
 #   GET  /stage            stage mode (scenarios paused by stage.sh), adHighCpu, ad's CPU limit
 #   POST /lift-cpu-limit   the symptom: remove ad's CPU limit, keeping a 300m request
 #   POST /rollback-flag    the cause: adHighCpu back to off, through flagd-ui
+#   POST /restore-cpu-limit  after the fix: ad back to git's shape (300m limit, no request)
 #   GET  /healthz          for the load balancer's health check (no auth, no data)
 #
-# Both actions refuse outside stage mode, so the hourly schedule never fights them, and
-# each posts a Datadog change event on the ad service. Every other path needs
+# The demo is shared and always on (no stage mode since 2026-10-24): the workflow runs these
+# on every hourly alert, and each posts a Datadog change event on the ad service. Every other path needs
 # "Authorization: Bearer <token>" (the remediator-token secret, made by up.sh; Datadog
 # holds it in a token-auth HTTP connection). Exposure, in layers: HTTPS through a GKE
 # Ingress with a Google-managed certificate for __HOST__ on the reserved static IP
@@ -107,6 +108,18 @@ data:
                      "ad deployment CPU limit", "configuration", limit, "none")
         return {"changed": True, "ad_cpu_limit_was": limit}
 
+    def restore_cpu_limit():
+        limit = ad_cpu_limit(k8s("GET", DEPLOY + "ad"))
+        if limit == "300m":
+            return {"changed": False, "ad_cpu_limit": limit}
+        k8s("PATCH", DEPLOY + "ad", {"spec": {"template": {"spec": {"containers": [
+            {"name": "ad", "resources": {"limits": {"cpu": "300m"}, "requests": None}}]}}}},
+            "application/strategic-merge-patch+json")
+        change_event("Workflow restored ad CPU limit to 300m (ad)",
+                     "Datadog Workflow Automation put the ad container's 300m CPU limit back after the fix, ready for the next run.",
+                     "ad deployment CPU limit", "configuration", limit or "none", "300m")
+        return {"changed": True, "ad_cpu_limit": "300m"}
+
     def rollback_flag():
         flags = flagd("/read")["flags"]
         old = flags["adHighCpu"]["defaultVariant"]
@@ -140,8 +153,6 @@ data:
             if action is None:
                 return self.reply(404, {"error": "not found"})
             try:
-                if self.command == "POST" and not stage()["stage_mode"]:
-                    return self.reply(409, {"error": "not in stage mode; stage.sh start pauses the schedule"})
                 return self.reply(200, action())
             except Exception as e:
                 return self.reply(500, {"error": str(e)})
@@ -150,7 +161,8 @@ data:
             self.handle_one({"/stage": stage})
 
         def do_POST(self):
-            self.handle_one({"/lift-cpu-limit": lift_cpu_limit, "/rollback-flag": rollback_flag})
+            self.handle_one({"/lift-cpu-limit": lift_cpu_limit, "/rollback-flag": rollback_flag,
+                             "/restore-cpu-limit": restore_cpu_limit})
 
         def log_message(self, fmt, *args):  # one line per request, never the token
             print(datetime.now(timezone.utc).isoformat(timespec="seconds"), self.command, self.path,

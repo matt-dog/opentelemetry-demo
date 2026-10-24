@@ -29,6 +29,24 @@ into git or undone.
 
 ## Log
 
+### 2026-10-24 · Shared, always-on demo: no stage mode; the workflow runs every hour
+- **What:** `workflows/remediate-ad.json` drops the stage check: on every ad latency alert it opens
+  an incident only if none is open for ad (option B: never more than one, never resolved, no seat
+  needed), waits 6 min, lifts ad's CPU limit, waits 3 min, rolls back adHighCpu, waits 1 min, and
+  restores the 300m limit; trigger rate limit 20 min. `remediator.yaml` drops its stage-mode
+  refusal and adds `POST /restore-cpu-limit`. `scenarios.yaml` acts only at window edges (and once
+  at startup), so a rollback in between sticks until the next window.
+- **Why:** Matthew, 2026-10-24: there is no stage mode; one demo serves many people at once, any
+  time. Presenters use the live :30 to :45 window or pin a past one (traces are kept at 100%).
+- **Verified (05:30 UTC, unattended):** flag on 05:30:19; monitor alert about 05:37; workflow
+  05:37:44, every step succeeded; no new incident (#1 and #2 open); limit lifted 05:43:50; the
+  schedule's edge turned the flag off at 05:45, before the workflow's rollback (05:46:51, no
+  change); limit restored 05:47:52.
+- **Open:** (1) changing the CPU limit restarts the ad pod, and the cold JVM spiked p95 to 59 ms and
+  re-alerted the monitor at 05:46; (2) the alert came 7 min after the flag (about 2.5 min before),
+  so the fixed waits ran past the window; (3) the problem throttled less consistently this hour
+  (p95 3 to 6 ms most minutes, about 100 ms in some), cause not yet known.
+
 ### 2026-10-24 · imageSlowLoad scheduled; resolve-incident workflow built (off); problem-pattern test
 - **What:** `scenarios.yaml` adds imageSlowLoad 5s from :46 to :52 (change events on frontend).
   `workflows/resolve-ad-incident.json` (new) and `workflows/remediate-ad.json` (moved from

@@ -3,11 +3,11 @@
 # problem starts and stops at known times with a quiet baseline in between, for
 # anomaly monitors and screenshots. See README.md.
 #
-# Each entry turns one flag to `variant` from minute `minutes[0]` up to (not
-# including) `minutes[1]` of every hour, UTC, and back to "off" otherwise. The
-# windows don't overlap, so each act of the tour has one problem at a time. The
-# pod owns only the flags listed here; a change to one of them in the flagd UI
-# is put back within 30 s. Every flip is also posted to Datadog as a change
+# Each entry turns one flag to `variant` at minute `minutes[0]` of every hour, UTC,
+# and back to "off" at `minutes[1]`. It acts only at those edges (and once at
+# startup), so anything that changes the flag in between, such as the remediation
+# workflow rolling back adHighCpu, sticks until the next edge. The windows don't
+# overlap, so each story has one problem at a time. Every flip is also posted to Datadog as a change
 # event on the affected service (`service` in the entry), so it shows as a
 # marker on graphs and in the service's change list. Edit the schedule and
 # `kubectl apply -f` this file, then
@@ -68,6 +68,7 @@ data:
             print("change event failed:", e, flush=True)
 
     print("schedule:", json.dumps(SCHEDULE), flush=True)
+    last = {}  # flag -> the variant this pod last aimed for; act only when that changes
     while True:
         try:
             flags = call("/read")["flags"]
@@ -76,6 +77,9 @@ data:
             for entry in SCHEDULE:
                 flag = flags[entry["flag"]]
                 want = wanted(entry, minute)
+                if last.get(entry["flag"]) == want:
+                    continue
+                last[entry["flag"]] = want
                 if flag["defaultVariant"] != want:
                     changed.append((entry, flag["defaultVariant"], want))
                     flag["defaultVariant"] = want
