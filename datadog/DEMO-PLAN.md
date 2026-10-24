@@ -144,7 +144,10 @@ Scheduled now: paymentFailure, aiRunawayAgent, adHighCpu, imageSlowLoad (ENVIRON
 No stage mode: the demo serves many presenters at once, any time. Everything runs on the hourly
 clock, the workflow acts on every alert, and presenters either catch the live :30 to :45 window or
 pin a past one. `stage.sh` is now for testing changes only. Incidents follow option B (at most one
-open for ad, never resolved) until there is an Incident Management seat. Open issues: CHANGES.md,
+open for ad, never resolved) until there is an Incident Management seat. The scheduler holds
+the baseline flags, so a flagd restart (for example a GKE node upgrade) no longer loses them.
+GKE upgrades the cluster automatically (REGULAR channel) and recreated every node at 17:26 UTC on
+2026-10-24; a maintenance window would keep that out of demo hours. Open issues: CHANGES.md,
 2026-10-24, Shared, always-on demo.
 
 ## Incidents, unattended (built, off)

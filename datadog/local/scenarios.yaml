@@ -25,6 +25,11 @@ data:
       {"flag": "adHighCpu", "variant": "on", "minutes": [30, 45], "service": "ad"},
       {"flag": "imageSlowLoad", "variant": "5sec", "minutes": [46, 52], "service": "frontend"}
     ]
+  baseline.json: |
+    [
+      {"flag": "cartFailure", "variant": "100%"},
+      {"flag": "productCatalogFailure", "targeting": {"if": [{"==": [{"var": "product_id"}, "OLJCESPC7Z"]}, "on", "off"]}}
+    ]
   scenarios.py: |
     import json, os, time, urllib.request
     from datetime import datetime, timezone
@@ -33,6 +38,9 @@ data:
     EVENTS = f"https://event-management-intake.{os.environ.get('DD_SITE', 'datad0g.com')}/api/v2/events"
     ENV = os.environ.get("DD_ENV", "")
     SCHEDULE = json.load(open("/app/schedule.json"))
+    # Held all the time, reapplied whenever they differ (after a flagd restart, say): the
+    # always-on errors up.sh used to set once, which a restart reset. Nothing else changes them.
+    BASELINE = json.load(open("/app/baseline.json"))
 
     def call(path, body=None):
         data = None if body is None else json.dumps(body).encode()
@@ -79,15 +87,27 @@ data:
                 want = wanted(entry, minute)
                 if last.get(entry["flag"]) == want:
                     continue
-                last[entry["flag"]] = want
                 if flag["defaultVariant"] != want:
                     changed.append((entry, flag["defaultVariant"], want))
                     flag["defaultVariant"] = want
-            if changed:
+            held = []
+            for b in BASELINE:
+                flag = flags[b["flag"]]
+                if "variant" in b and flag["defaultVariant"] != b["variant"]:
+                    flag["defaultVariant"] = b["variant"]; held.append(b["flag"])
+                if "targeting" in b and flag.get("targeting") != b["targeting"]:
+                    flag["targeting"] = b["targeting"]; held.append(b["flag"])
+            if changed or held:
                 # flagd-ui replaces the whole flag file with what it is given.
                 call("/write", {"data": {"flags": flags}})
-                for entry, old, new in changed:
-                    change_event(entry, old, new)
+            if held:
+                print(datetime.now(timezone.utc).isoformat(timespec="seconds"), "baseline restored:", ", ".join(held), flush=True)
+            # An edge counts as done only once flagd has accepted it; a failed write retries.
+            for entry in SCHEDULE:
+                last[entry["flag"]] = wanted(entry, minute)
+            for entry, old, new in changed:
+                change_event(entry, old, new)
+            if changed:
                 print(datetime.now(timezone.utc).isoformat(timespec="seconds"), "set",
                       ", ".join(f"{e['flag']}={n}" for e, _, n in changed), flush=True)
         except Exception as e:

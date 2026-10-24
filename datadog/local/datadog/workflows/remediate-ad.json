@@ -1,6 +1,6 @@
 {
   "name": "[otel demo] remediate ad latency (${ENV_NAME})",
-  "description": "Act 3, on every ad latency alert (shared demo, no stage mode): open an incident if none is open, wait 6 min, lift ad's CPU limit, wait 3 min, roll back adHighCpu, then restore the limit.",
+  "description": "Act 3, on every ad latency alert (shared demo, no stage mode): open an incident if none is open for ad, wait 3 min, then roll back adHighCpu, the change that caused it.",
   "spec": {
     "handle": "otel-demo-remediate-ad",
     "triggers": [
@@ -136,50 +136,6 @@
         "parameters": [
           {
             "name": "durationSeconds",
-            "value": 360
-          }
-        ],
-        "outboundEdges": [
-          {
-            "branchName": "main",
-            "nextStepName": "Lift_cpu_limit"
-          }
-        ],
-        "readinessGate": {
-          "thresholdType": "ANY"
-        }
-      },
-      {
-        "name": "Lift_cpu_limit",
-        "actionId": "com.datadoghq.http.request",
-        "connectionLabel": "INTEGRATION_REMEDIATOR",
-        "parameters": [
-          {
-            "name": "verb",
-            "value": "POST"
-          },
-          {
-            "name": "url",
-            "value": "${REMEDIATOR_URL}/lift-cpu-limit"
-          },
-          {
-            "name": "responseParsing",
-            "value": "json"
-          }
-        ],
-        "outboundEdges": [
-          {
-            "branchName": "main",
-            "nextStepName": "Wait_for_recovery"
-          }
-        ]
-      },
-      {
-        "name": "Wait_for_recovery",
-        "actionId": "com.datadoghq.core.sleep",
-        "parameters": [
-          {
-            "name": "durationSeconds",
             "value": 180
           }
         ],
@@ -188,7 +144,10 @@
             "branchName": "main",
             "nextStepName": "Rollback_flag"
           }
-        ]
+        ],
+        "readinessGate": {
+          "thresholdType": "ANY"
+        }
       },
       {
         "name": "Rollback_flag",
@@ -202,47 +161,6 @@
           {
             "name": "url",
             "value": "${REMEDIATOR_URL}/rollback-flag"
-          },
-          {
-            "name": "responseParsing",
-            "value": "json"
-          }
-        ],
-        "outboundEdges": [
-          {
-            "branchName": "main",
-            "nextStepName": "Wait_before_restore"
-          }
-        ]
-      },
-      {
-        "name": "Wait_before_restore",
-        "actionId": "com.datadoghq.core.sleep",
-        "parameters": [
-          {
-            "name": "durationSeconds",
-            "value": 60
-          }
-        ],
-        "outboundEdges": [
-          {
-            "branchName": "main",
-            "nextStepName": "Restore_cpu_limit"
-          }
-        ]
-      },
-      {
-        "name": "Restore_cpu_limit",
-        "actionId": "com.datadoghq.http.request",
-        "connectionLabel": "INTEGRATION_REMEDIATOR",
-        "parameters": [
-          {
-            "name": "verb",
-            "value": "POST"
-          },
-          {
-            "name": "url",
-            "value": "${REMEDIATOR_URL}/restore-cpu-limit"
           },
           {
             "name": "responseParsing",

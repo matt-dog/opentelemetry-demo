@@ -65,7 +65,7 @@ in `CHANGES.md` when it is turned on.
 | Namespace | `otel-demo` |
 | Collectors | DDOT daemon (one per node), DDOT cluster, DDOT Host Profiler (one per node), all in `opentelemetry-operator-system`; upstream `contrib` (collector-contrib 0.161.0) in `otel-demo` |
 | Remediator (Act 3) | `https://34-54-251-237.sslip.io`: GKE Ingress on the global static IP `otel-demo-remediator` (34.54.251.237), Google-managed certificate, Cloud Armor policy `otel-demo-remediator` (Datadog webhooks ranges only), token in secret `remediator-token` |
-| Problem schedule | `scenarios` pod: paymentFailure 25% :00 to :10, aiRunawayAgent :15 to :25, adHighCpu :30 to :45, imageSlowLoad 5s :46 to :52, each hour, UTC; `local/stage.sh` pauses it for a live demo. cartFailure stays at 100% all the time (set by `up.sh`) |
+| Problem schedule | `scenarios` pod: paymentFailure 25% :00 to :10, aiRunawayAgent :15 to :25, adHighCpu :30 to :45, imageSlowLoad 5s :46 to :52, each hour, UTC; `local/stage.sh` pauses it for a live demo. cartFailure 100% and the productCatalogFailure rule are held by the same pod (`baseline.json`), so they survive a flagd restart |
 | Local | Rancher Desktop, context `rancher-desktop`, about 12 GB for the VM |
 
 Created 2026-10-22 by `up.sh gke`. It replaced `otel-demo-blog` (sent to ddstaging)

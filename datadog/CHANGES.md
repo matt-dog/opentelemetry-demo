@@ -29,6 +29,24 @@ into git or undone.
 
 ## Log
 
+### 2026-10-24 · Workflow simplified; scheduler retries failed edges and holds the baseline flags
+- **What:** `workflows/remediate-ad.json` drops the CPU-limit lift and restore: open an incident if
+  none is open for ad, wait 3 min, roll back adHighCpu. `scenarios.yaml` marks an edge done only
+  after flagd accepts the write, and holds a baseline (`baseline.json`: cartFailure 100% and the
+  productCatalogFailure rule for OLJCESPC7Z), reapplied whenever it differs.
+- **Why:** changing the CPU limit restarted the ad pod (cold-JVM spike, second alert). Over the
+  next 12 hours the simplified loop ran in 11: alert 1.7 to 4.7 min after :30, rollback 3 min
+  later, incidents steady at 2. The 08:30 window never started: adHighCpu evaluated off all window,
+  consistent with a failed write the old code recorded as done (the pod's log was lost). At 17:14
+  and 17:26 UTC GKE upgraded the control plane and recreated all three nodes (REGULAR channel);
+  flagd's restart reset the baseline flags `up.sh` set once, and the fresh ad pod spiked p95 to
+  1.9 s during the 17:30 window.
+- **Verified:** new pod restored the baseline once (cartFailure 100%, rule fires), then a quiet log.
+  A misplaced block briefly printed empty "set" lines (18:11 to 18:13, no flag changed, no
+  duplicate events); fixed the same minute.
+- **Open:** GKE automatic upgrades recreate the nodes during the day; a maintenance window or
+  exclusion would keep them off demo hours (DEMO-PLAN.md).
+
 ### 2026-10-24 · Shared, always-on demo: no stage mode; the workflow runs every hour
 - **What:** `workflows/remediate-ad.json` drops the stage check: on every ad latency alert it opens
   an incident only if none is open for ad (option B: never more than one, never resolved, no seat
