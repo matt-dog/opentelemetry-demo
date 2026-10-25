@@ -68,6 +68,17 @@ into git or undone.
     it, with no restart. 10000x for 60 s: OOMKilled within about 40 s. Datadog has
     `k8s.container.restarts` and `kube_pod_container_status_last_terminated_reason{reason:oomkilled}`.
     Checkout only warns ("failed to send order confirmation"); its errors stay at baseline.
+- **First full window, 2026-10-25 02:30 (one run):** every chapter showed. ad p95 46 to 60 ms
+  (:34 to :38), workflow rollback 02:38:47, monitor OK 02:43. payment had 0 errors in the 15 min before
+  and 9 of 31 calls failed in the window. Agent spans went from 73 to 101 per 5 min before to 257 to 445.
+  RUM had 206 image loads over 3 s, none before. fraud-detection lag reached 606, back to 0 a minute after
+  :41. product-catalog p95 was 12 to 25.5 s, and `postgresql.database.locks` showed the
+  AccessExclusiveLock on products with up to 18 AccessShareLocks waiting. email was OOMKilled 5 times
+  (:38 to :43) and was running again at 02:45:38, after its CrashLoopBackOff delay. Payment calls fell
+  about 40% across the window (fewer orders while the shop slows).
+- **Presenter script:** the Google Doc has chapters: Chapter 1 is the earlier script, unchanged
+  (Matthew's screenshots kept); Chapters 2 to 6 (errors, RUM, AI, data layer, Kubernetes) replace
+  "Optional stories"; a tool-consolidation key message; window notes for :30 to :45.
 - **Shared loop, 2026-10-24 19:30 to 2026-10-25 01:30 (7 windows, first four patterns):** 6 windows
   rolled back by the workflow; 20:30 missed (above). The alert came 1 to 10 min after :30; at 01:30,
   p95 stayed at 3 to 5 ms for 10 minutes with the flag on before it rose.
