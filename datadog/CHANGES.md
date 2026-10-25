@@ -31,6 +31,20 @@ into git or undone.
 
 ## Log
 
+### 2026-10-25 · Presenter dashboard for the window; Close line corrected
+- **What:** `datadog/dashboards/demo-window.json`, applied by `dd-apply.py` (new step, matched by title):
+  a note with the schedule and one timeseries per chapter (ad p95 with the 20 ms alert line, payment
+  errors, RUM image loads over 3 s, agent spans, Kafka lag, locks on catalog.products by mode,
+  product-catalog p95, email restarts and the OOMKilled reason), with the scheduler's and workflow's
+  change events on the ad and payment widgets. The Doc's Setup table links it. The Doc's Close no
+  longer offers "the same trace in Jaeger" as a screen: the daemon Collector does send every trace to
+  the in-cluster Jaeger, but it is reachable only by port-forward.
+- **Why:** one screen shows every chapter of the shared window at once, which is the tool-consolidation
+  point, and tells a presenter which chapters are live. Planned since 2026-10-22 (DEMO-PLAN.md, item 7).
+- **Verified:** created, then updated in place on a second run; the API kept every widget, marker and
+  event overlay. Each widget's query was checked against the 02:30 window's data; the rendered page
+  has not been looked at.
+
 ### 2026-10-25 · Three more chapters in the :30 to :45 window; lock contention fixed; rollback always refreshes ad
 - **What:**
   - `scenarios.yaml`: every problem runs in one window on staggered starts: adHighCpu :30, paymentFailure

@@ -181,6 +181,27 @@ def apply_workflow(path, env):
         print(f"workflow created: {wf['name']} ({(made or {}).get('data', {}).get('id')}, {status})")
 
 
+def apply_dashboard(db):
+    """Create or update a dashboard, matched by exact title. Prints the API's error text when
+    one is refused, since a malformed widget otherwise fails silently."""
+    db["tags"] = sorted(set(db.get("tags", [])) | {"team:otel-demo"})
+    _, found = call("GET", "/api/v1/dashboard")
+    same = [d for d in (found or {}).get("dashboards", []) if d["title"] == db["title"]]
+    method, path = ("PUT", f"/api/v1/dashboard/{same[0]['id']}") if same else ("POST", "/api/v1/dashboard")
+    req = urllib.request.Request(API + path, method=method, data=json.dumps(db).encode(),
+                                 headers={"DD-API-KEY": os.environ["DD_API_KEY"],
+                                          "DD-APPLICATION-KEY": os.environ["DD_APP_KEY"],
+                                          "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            out = json.load(r)
+        print(f"dashboard {'updated' if same else 'created'}: {db['title']} ({out.get('id')}, {out.get('url')})")
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise Refused(f"{method} {path}: {e.code}")
+        print(f"dashboard not applied: {db['title']} ({e.code}: {e.read().decode()[:300]})")
+
+
 def apply_slo(s):
     """Create or update an SLO, matched by name and tagged like the monitors. Prints the API's
     error text when one is refused, since a malformed SLO otherwise fails silently."""
@@ -221,6 +242,8 @@ def main():
               for f in sorted((HERE / "monitors").glob("*.json"))]
     steps += [(f"SLO {f.name}", lambda f=f: apply_slo(load(f, env)))
               for f in sorted((HERE / "slos").glob("*.json"))]
+    steps += [(f"dashboard {f.name}", lambda f=f: apply_dashboard(load(f, env)))
+              for f in sorted((HERE / "dashboards").glob("*.json"))]
     for name, step in steps:
         try:
             step()

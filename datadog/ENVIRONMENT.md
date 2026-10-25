@@ -25,7 +25,7 @@ and `DD_APP_KEY_REF` set.
 ### Objects in the org
 
 Built from git by `local/dd-apply.py` (run by `up.sh`), matched by name, tagged
-`managed_by:otel-demo-local`:
+`managed_by:otel-demo-local` (dashboards: `team:otel-demo`):
 
 | Object | Id | Status |
 |---|---|---|
@@ -39,6 +39,7 @@ Built from git by `local/dd-apply.py` (run by `up.sh`), matched by name, tagged
 | Monitor `[otel demo] ad service error rate (otel-demo)` (errors over hits above 5%, 10 min) | 35274708 | created 2026-10-23; service health next to the latency monitor |
 | SLO `[otel demo] ad GetAds p95 under 20 ms (otel-demo)` (time slice, 99% of minutes, 7d) | `4e556ecc37d6557babf1732d1062f771` | created 2026-10-23; 90.3% over its first 24h, because the hourly flag windows burn about 15 minutes an hour |
 | SLO `[otel demo] ad availability (otel-demo)` (metric, 99.9%, 7d) | `593a4450738b5b529773be51cf267fce` | created 2026-10-23; 100% (no ad errors) |
+| Dashboard `[otel demo] the :30 to :45 window (otel-demo)` | `knb-9zr-fkt` | created 2026-10-25; one widget per chapter of the presenter script, change events overlaid; linked from the Doc's Setup table |
 | APM retention filter `otel demo: every span (otel-demo)` | `env:otel-demo` at 100% | created 2026-10-22, so the demo's traces stay searchable after Live Search's 15 minutes |
 | Log index for the env | none | creation refused (403) even with an unscoped key; not needed here, since `main` has no exclusion filter in this org |
 
