@@ -5,7 +5,7 @@ handed over. `local/README.md` covers what differs from the upstream demo and ho
 to run it; `CHANGES.md` is the dated history, including hand changes not yet in git.
 Keep this file current in the same commit as any change to the environment.
 
-As of 2026-10-22.
+As of 2026-10-25.
 
 ## Datadog org
 
@@ -32,7 +32,7 @@ Built from git by `local/dd-apply.py` (run by `up.sh`), matched by name, tagged
 | RUM application `astronomy-shop (otel-demo)` | `8d3ef4e9-394d-4519-9cbe-aeee1a60d120` | created 2026-10-22 |
 | Monitor `[otel demo] ad service latency anomaly (otel-demo)` | 35241062 | created 2026-10-22; needs about a day of history before its baseline is trustworthy |
 | Monitor `[otel demo] ad service p95 latency high (otel-demo)` (per-minute p95 over 20 ms) | 35243022 | created 2026-10-22; Act 1's alert. Replaced the 50 ms monitor 35241065 (deleted), which stayed OK through the problem |
-| Workflow `[otel demo] remediate ad latency (otel-demo)`, handle `@workflow-otel-demo-remediate-ad` | `d0eecab0-b4b3-4d35-b717-2a43164e32a9` | 2026-10-23; started by the latency monitor on Alert; acts only in stage mode; declares an incident (SEV-3, services: ad) and resolves it at the end |
+| Workflow `[otel demo] remediate ad latency (otel-demo)`, handle `@workflow-otel-demo-remediate-ad` | `d0eecab0-b4b3-4d35-b717-2a43164e32a9` | 2026-10-23; started by the latency monitor on every alert (at most once per 20 min); declares an incident (SEV-3, services: ad) only if none is open (option B: never resolved, no seat), waits 3 min, rolls back adHighCpu |
 | Workflow `[otel demo] resolve ad incident (otel-demo)`, handle `@workflow-otel-demo-resolve-ad-incident` | `41205ee4-70f2-4b21-9e3e-db102d7ccfac` | 2026-10-24; published but not mentioned by any monitor yet (off until an Incident Management seat exists) |
 | Incident Management | first incident #1 on 2026-10-23, declared by the workflow | resolving needs an Incident Management seat for the workflow's owner (403 "Seat Required" without one); creating does not |
 | HTTP connection `otel-demo remediator` (token auth) | `d9d26ff3-d299-47af-ac63-ffae3e0bd217` | 2026-10-23; holds the remediator token |
@@ -64,9 +64,10 @@ in `CHANGES.md` when it is turned on.
 | Nodes | 3 x `e2-standard-4`, network `ddot-lab`, subnet `ddot-lab-us-east1`, label `purpose=otel-demo` |
 | Namespace | `otel-demo` |
 | GKE maintenance window | daily 06:00 to 10:00 UTC (set 2026-10-24, and by `up.sh gke`); GKE's automatic upgrades recreate every node, so they stay out of demo hours |
+| astronomy-db grant | `GRANT MAINTAIN ON catalog.products TO astronomy_user`, appended by `up.sh` to the chart's `postgresql-init` configmap (needed by productCatalogLockContention; a helm upgrade outside `up.sh` reverts it) |
 | Collectors | DDOT daemon (one per node), DDOT cluster, DDOT Host Profiler (one per node), all in `opentelemetry-operator-system`; upstream `contrib` (collector-contrib 0.161.0) in `otel-demo` |
 | Remediator (Act 3) | `https://34-54-251-237.sslip.io`: GKE Ingress on the global static IP `otel-demo-remediator` (34.54.251.237), Google-managed certificate, Cloud Armor policy `otel-demo-remediator` (Datadog webhooks ranges only), token in secret `remediator-token` |
-| Problem schedule | `scenarios` pod: paymentFailure 25% :00 to :10, aiRunawayAgent :15 to :25, adHighCpu :30 to :45, imageSlowLoad 5s :46 to :52, each hour, UTC; `local/stage.sh` pauses it for a live demo. cartFailure 100% and the productCatalogFailure rule are held by the same pod (`baseline.json`), so they survive a flagd restart |
+| Problem schedule | `scenarios` pod, every hour, UTC, all inside :30 to :45: adHighCpu :30, paymentFailure 25% :31, aiRunawayAgent :32, imageSlowLoad 5s :33 (each to :45), kafkaQueueProblems :35 to :41, emailMemoryLeak 10000x :38 to :44, productCatalogLockContention :42 to :45. cartFailure 10% and the productCatalogFailure rule are held all the time by the same pod (`baseline.json`), so they survive a flagd restart. `local/stage.sh` is for testing changes only |
 | Local | Rancher Desktop, context `rancher-desktop`, about 12 GB for the VM |
 
 Created 2026-10-22 by `up.sh gke`. It replaced `otel-demo-blog` (sent to ddstaging)

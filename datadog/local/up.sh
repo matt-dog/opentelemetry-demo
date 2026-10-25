@@ -110,6 +110,22 @@ kubectl -n "$NS" create secret generic agent-llm \
 helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
   --version "$DEMO_CHART_VERSION" --namespace "$NS" \
   --values "$HERE/values-local.yaml" >/dev/null
+# productCatalogLockContention (3.1.0) takes LOCK TABLE catalog.products, which the chart's
+# init.sql does not allow (SELECT only: "permission denied for table products"). MAINTAIN
+# allows the lock without data writes (Postgres 17+). astronomy-db has no volume and runs
+# init.sql at every start, so the grant goes in that configmap; helm reverts it on every
+# upgrade, so it is added back here, and the database restarted only if it lacks the grant.
+init=$(kubectl -n "$NS" get configmap postgresql-init -o jsonpath='{.data.init\.sql}')
+if ! grep -q "GRANT MAINTAIN ON catalog.products" <<<"$init"; then
+  kubectl -n "$NS" create configmap postgresql-init --dry-run=client -o yaml \
+    --from-literal=init.sql="$init"$'\n\n-- Added by up.sh for productCatalogLockContention.\nGRANT MAINTAIN ON catalog.products TO astronomy_user;\n' \
+    | kubectl apply -f - >/dev/null  # warns once about a missing annotation; harmless
+fi
+kubectl -n "$NS" rollout status deploy/astronomy-db --timeout=300s >/dev/null
+if [ "$(kubectl -n "$NS" exec deploy/astronomy-db -- psql -U postgres -d astronomy_db -Atc \
+      "select has_table_privilege('astronomy_user', 'catalog.products', 'MAINTAIN')")" != "t" ]; then
+  kubectl -n "$NS" rollout restart deploy/astronomy-db >/dev/null
+fi
 
 kubectl apply -f "$HERE/shopper.yaml" >/dev/null
 # The scenarios pod posts a Datadog change event at every flag flip.
@@ -126,12 +142,9 @@ echo "Waiting for every pod to be Ready (up to 10 minutes)"
 kubectl -n "$NS" wait --for=condition=Ready pods --all --timeout=600s >/dev/null \
   || echo "some pods are not Ready yet: kubectl -n $NS get pods" >&2
 
-# ---- failure scenarios for error traces -------------------------------------------
-# They reset when the flagd pod restarts; rerun up.sh.
-echo "Setting feature flags: paymentFailure 50%, cartFailure 100%, productCatalogFailure on"
-# Through flagd-ui's API (flags.py); it does not see edits to flagd's file.
-python3 "$HERE/flags.py" set paymentFailure=50% cartFailure=100%
-python3 "$HERE/flags.py" target-product OLJCESPC7Z
+# ---- failure scenarios ---------------------------------------------------------------
+# The scenarios pod sets every flag: the hourly problems (schedule.json) and the ones held
+# all the time, cartFailure 10% and productCatalogFailure for one product (baseline.json).
 
 # ---- Act 3: the remediator, called by Datadog Workflow Automation (GKE only) --------
 # HTTPS on a reserved static IP with a Google-managed certificate for <ip>.sslip.io,

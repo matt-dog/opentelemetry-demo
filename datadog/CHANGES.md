@@ -22,12 +22,55 @@ into git or undone.
 
 | Date | Where | Change | Why | Status |
 |---|---|---|---|---|
+| 2026-10-25 | astronomy-db (`kubectl exec`), configmap `postgresql-init` | `GRANT MAINTAIN ON catalog.products TO astronomy_user`, live and appended to init.sql | productCatalogLockContention needs it (entry 2026-10-25) | same as what `up.sh` now does; any helm upgrade outside `up.sh` reverts the configmap |
+| 2026-10-25 | flagd-ui flag set | `adHighCpu` carries a `metadata.rollback` timestamp | written by the remediator on every rollback (and once by hand in a test) | expected; metadata does not affect evaluation |
 | 2026-10-23 | matt-dog Incident Management | Incident #1 declared by the workflow test, still active | Resolve step refused: no Incident Management seat | Resolve by hand, or rerun once a seat is assigned |
 | 2026-10-23 | matt-dog org, Mosaic | `graphing_semantic_metric_names` on (Matthew) | metrics features for OTel metric names, next to Semantic Query Mode | on; internal flag, set outside git |
 | 2026-10-22 | matt-dog org settings, Preferences (UI) | OTel Semantic Query Mode on | queries match OTel and Datadog metric names | on; an org setting, no API found to set it from git |
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-10-25 · Three more chapters in the :30 to :45 window; lock contention fixed; rollback always refreshes ad
+- **What:**
+  - `scenarios.yaml`: every problem runs in one window on staggered starts: adHighCpu :30, paymentFailure
+    25% :31, aiRunawayAgent :32, imageSlowLoad 5s :33 (each to :45), kafkaQueueProblems :35 to :41
+    (change events on fraud-detection), emailMemoryLeak 10000x :38 to :44, productCatalogLockContention
+    :42 to :45. The cartFailure baseline is 10%, down from 100%.
+  - `up.sh`: after the helm upgrade, it appends `GRANT MAINTAIN ON catalog.products TO astronomy_user`
+    to the chart's `postgresql-init` configmap, and restarts astronomy-db if the grant is missing. It no
+    longer sets flags itself, since the scheduler holds them. The `bash -n` syntax check passes; the block
+    has not run on a fresh cluster.
+  - `remediator.yaml`: `/rollback-flag` always writes, stamping `metadata.rollback` on adHighCpu.
+  - `contrib-collector.yaml`: the optional `postgresql.database.locks` metric is on.
+- **Why:**
+  - Tool consolidation: each problem is a chapter on its own service and Datadog product, all from
+    OTel data, and one window (live or pinned) holds them all.
+  - cartFailure at 100% failed every checkout, so nothing published to Kafka from 2026-10-23 14:00 to
+    2026-10-24 14:00 (and again after 18:11).
+  - Lock contention never worked here. The 3.1.0 product-catalog takes `LOCK TABLE ... ACCESS EXCLUSIVE`,
+    but chart 0.42.1's init.sql grants only SELECT: "pq: permission denied for table products". It logs
+    only over OTLP, so `kubectl logs` showed nothing. MAINTAIN (Postgres 17+) allows the lock without
+    data writes. astronomy-db has no volume and runs init.sql at every start.
+  - At 19:35 on 2026-10-24 a rollback succeeded (flagd reloaded the file), but ad kept evaluating
+    adHighCpu "on" until the next write at 20:30. Most likely ad's flagd provider missed the change
+    notification; that is not proven. The monitor stayed in alert, and the workflow's 20-minute rate
+    limit swallowed the 20:30 window. A metadata write makes flagd notify ad for that key: tested by
+    hand at 01:31 (ad re-evaluated 3 s later) and through the endpoint at 02:16 (1 s later,
+    `refreshed: true`). It has not been tested against a real missed notification.
+- **Verified (one run each, 2026-10-25, outside the window):**
+  - productCatalogLockContention, 90 s: product-catalog p95 21 ms to 26.8 s, the slowest Postgres
+    query 29.6 s, frontend p95 15 s, ad hits down about 40%, checkouts 1 to 2 a minute. A `LOCK TABLE`
+    span shows in traces.
+  - kafkaQueueProblems, 3 min: fraud-detection lag 0 to 1 rose to 909, drained within a minute of off;
+    checkout logs "overloading queue now".
+  - emailMemoryLeak: 1000x for 4 min took email from 55 to 96 Mi of its 100 Mi limit, then Ruby freed
+    it, with no restart. 10000x for 60 s: OOMKilled within about 40 s. Datadog has
+    `k8s.container.restarts` and `kube_pod_container_status_last_terminated_reason{reason:oomkilled}`.
+    Checkout only warns ("failed to send order confirmation"); its errors stay at baseline.
+- **Shared loop, 2026-10-24 19:30 to 2026-10-25 01:30 (7 windows, first four patterns):** 6 windows
+  rolled back by the workflow; 20:30 missed (above). The alert came 1 to 10 min after :30; at 01:30,
+  p95 stayed at 3 to 5 ms for 10 minutes with the flag on before it rose.
 
 ### 2026-10-24 · GKE maintenance window; presenter script updated for the shared demo
 - **What:** the cluster's maintenance window is daily 06:00 to 10:00 UTC (`gcloud container clusters

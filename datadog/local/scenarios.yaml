@@ -6,8 +6,13 @@
 # Each entry turns one flag to `variant` at minute `minutes[0]` of every hour, UTC,
 # and back to "off" at `minutes[1]`. It acts only at those edges (and once at
 # startup), so anything that changes the flag in between, such as the remediation
-# workflow rolling back adHighCpu, sticks until the next edge. The windows don't
-# overlap, so each story has one problem at a time. Every flip is also posted to Datadog as a change
+# workflow rolling back adHighCpu, sticks until the next edge. Every problem runs inside
+# :30 to :45 on staggered starts, each on its own service and Datadog product, so one window
+# (live, or pinned afterwards) holds every chapter of the demo; the rest of the hour is baseline.
+# Kafka lag drains within a minute of :41. emailMemoryLeak 10000x OOM-kills email on its first
+# padded emails (1000x only grows memory, which Ruby frees). The lock stalls every catalog read,
+# slowing the whole shop (ad traffic fell about 40% in a test), so it runs last and short.
+# Every flip is also posted to Datadog as a change
 # event on the affected service (`service` in the entry), so it shows as a
 # marker on graphs and in the service's change list. Edit the schedule and
 # `kubectl apply -f` this file, then
@@ -20,14 +25,17 @@ metadata:
 data:
   schedule.json: |
     [
-      {"flag": "paymentFailure", "variant": "25%", "minutes": [0, 10], "service": "payment"},
-      {"flag": "aiRunawayAgent", "variant": "on", "minutes": [15, 25], "service": "agent"},
       {"flag": "adHighCpu", "variant": "on", "minutes": [30, 45], "service": "ad"},
-      {"flag": "imageSlowLoad", "variant": "5sec", "minutes": [46, 52], "service": "frontend"}
+      {"flag": "paymentFailure", "variant": "25%", "minutes": [31, 45], "service": "payment"},
+      {"flag": "aiRunawayAgent", "variant": "on", "minutes": [32, 45], "service": "agent"},
+      {"flag": "imageSlowLoad", "variant": "5sec", "minutes": [33, 45], "service": "frontend"},
+      {"flag": "kafkaQueueProblems", "variant": "on", "minutes": [35, 41], "service": "fraud-detection"},
+      {"flag": "emailMemoryLeak", "variant": "10000x", "minutes": [38, 44], "service": "email"},
+      {"flag": "productCatalogLockContention", "variant": "on", "minutes": [42, 45], "service": "product-catalog"}
     ]
   baseline.json: |
     [
-      {"flag": "cartFailure", "variant": "100%"},
+      {"flag": "cartFailure", "variant": "10%"},
       {"flag": "productCatalogFailure", "targeting": {"if": [{"==": [{"var": "product_id"}, "OLJCESPC7Z"]}, "on", "off"]}}
     ]
   scenarios.py: |

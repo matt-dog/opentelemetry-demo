@@ -132,12 +132,13 @@ compared with the hour before:
 | `paymentFailure` 25% | works: payment error rate 7% to 26% | Error Tracking: exception with stack |
 | `imageSlowLoad` 5s | works in the browser: RUM image load p95 0.14 s to 5.09 s | RUM: slow page, user impact |
 | `aiRunawayAgent` | scheduled since 2026-10-19 | LLM Observability |
-| `cartFailure` 100% | on all the time | errors inside a successful checkout |
+| `cartFailure` 10% (was 100%) | on all the time | errors inside a successful checkout; at 100% no order reached Kafka |
 | `intlShippingSlowdown` 5s | evaluated, no effect: only international orders, and the shoppers order domestically | needs an international order |
-| `kafkaQueueProblems` | no consumer lag seen; not evaluated in the window (orders may not have flowed) | needs a focused retest |
-| `productCatalogLockContention` | never evaluated, though the 3.1.0 loop should check it every 10 s | needs code-level digging |
+| `kafkaQueueProblems` | works (2026-10-25): fraud-detection lag 0 to 909 in 3 min, drains in a minute | Kafka: consumer lag, DDOT SDK consumer |
+| `productCatalogLockContention` | works after a grant (2026-10-25): product-catalog p95 21 ms to 26.8 s; slows the whole shop | Postgres: lock span, locks metric, integration dashboard |
+| `emailMemoryLeak` 10000x | works (2026-10-25): OOMKilled in about 40 s; 1000x only grows memory | Kubernetes: restarts, OOMKilled reason |
 
-Scheduled now: paymentFailure, aiRunawayAgent, adHighCpu, imageSlowLoad (ENVIRONMENT.md).
+Scheduled now, all in :30 to :45: the seven working flags above (ENVIRONMENT.md). Each is a chapter on its own service and Datadog product, all from OTel data.
 
 ## Shared demo (2026-10-24)
 

@@ -123,10 +123,14 @@ data:
     def rollback_flag():
         flags = flagd("/read")["flags"]
         old = flags["adHighCpu"]["defaultVariant"]
-        if old == "off":
-            return {"changed": False, "adHighCpu": "off"}
         flags["adHighCpu"]["defaultVariant"] = "off"
+        # Always write, with a fresh stamp: flagd then tells ad that adHighCpu changed, so ad
+        # re-evaluates even if it missed an earlier change (2026-10-24 19:35, ad kept "on" for
+        # an hour after a successful rollback). Metadata does not affect evaluation.
+        flags["adHighCpu"]["metadata"] = {"rollback": datetime.now(timezone.utc).isoformat(timespec="seconds")}
         flagd("/write", {"data": {"flags": flags}})  # flagd-ui replaces the whole file
+        if old == "off":
+            return {"changed": False, "adHighCpu": "off", "refreshed": True}
         change_event("Workflow rolled back adHighCpu to off (ad)",
                      f"Datadog Workflow Automation rolled back the change behind the ad latency alert: adHighCpu {old} to off.",
                      "adHighCpu", "feature_flag", old, "off")
