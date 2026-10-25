@@ -85,9 +85,21 @@ data:
 
     print("schedule:", json.dumps(SCHEDULE), flush=True)
     last = {}  # flag -> the variant this pod last aimed for; act only when that changes
+    # flag -> when to notify again. A service can miss flagd's change notification and keep its
+    # cached variant (ad did twice on 2026-10-24/25: once after a rollback, once at a :30 edge), so
+    # a minute after each change the flag is written again with a fresh metadata stamp. flagd sends
+    # a second notification; the variant is whatever flagd-ui holds then (a rollback sticks).
+    nudge = {}
     while True:
         try:
             flags = call("/read")["flags"]
+            due = [f for f, t in nudge.items() if t <= time.time()]
+            if due:
+                for f in due:
+                    flags[f]["metadata"] = {"nudge": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+                call("/write", {"data": {"flags": flags}})
+                for f in due:
+                    del nudge[f]
             minute = datetime.now(timezone.utc).minute
             changed = []
             for entry in SCHEDULE:
@@ -114,6 +126,7 @@ data:
             for entry in SCHEDULE:
                 last[entry["flag"]] = wanted(entry, minute)
             for entry, old, new in changed:
+                nudge[entry["flag"]] = time.time() + 60
                 change_event(entry, old, new)
             if changed:
                 print(datetime.now(timezone.utc).isoformat(timespec="seconds"), "set",

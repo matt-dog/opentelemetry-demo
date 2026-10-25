@@ -23,13 +23,29 @@ into git or undone.
 | Date | Where | Change | Why | Status |
 |---|---|---|---|---|
 | 2026-10-25 | astronomy-db (`kubectl exec`), configmap `postgresql-init` | `GRANT MAINTAIN ON catalog.products TO astronomy_user`, live and appended to init.sql | productCatalogLockContention needs it (entry 2026-10-25) | same as what `up.sh` now does; any helm upgrade outside `up.sh` reverts the configmap |
-| 2026-10-25 | flagd-ui flag set | `adHighCpu` carries a `metadata.rollback` timestamp | written by the remediator on every rollback (and once by hand in a test) | expected; metadata does not affect evaluation |
+| 2026-10-25 | flagd-ui flag set | `adHighCpu` carries a `metadata.rollback` timestamp; scheduled flags carry `metadata.nudge` | written by the remediator on every rollback and by the scheduler a minute after each change (and once by hand in a test) | expected; metadata does not affect evaluation |
 | 2026-10-23 | matt-dog Incident Management | Incident #1 declared by the workflow test, still active | Resolve step refused: no Incident Management seat | Resolve by hand, or rerun once a seat is assigned |
 | 2026-10-23 | matt-dog org, Mosaic | `graphing_semantic_metric_names` on (Matthew) | metrics features for OTel metric names, next to Semantic Query Mode | on; internal flag, set outside git |
 | 2026-10-22 | matt-dog org settings, Preferences (UI) | OTel Semantic Query Mode on | queries match OTel and Datadog metric names | on; an org setting, no API found to set it from git |
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-10-25 · Scheduler notifies each changed flag twice
+- **What:** `scenarios.yaml` writes each flag it changed again a minute later with a fresh
+  `metadata.nudge` stamp; the variant is whatever flagd-ui holds then, so a rollback in between sticks.
+- **Why:** in the 04:30 window ad never evaluated adHighCpu "on". flagd-ui held "on" all window (the
+  scheduler set it back to off at 04:45), but ad served its cached "off": no latency, no alert, no
+  rollback. That is the second time ad missed a flagd change notification (the first: 19:35 on
+  2026-10-24, after a rollback). The cause is not known; the other services saw their changes at 04:30
+  (payment errors, Kafka lag 1,410, email restarts, the lock logged). A metadata write makes flagd
+  notify again (see the remediator fix below), so a second notification a minute later covers a miss.
+- **Verified:** at 05:30 ad evaluated "on" at 05:30:13 and again at 05:31:14 (the nudge), alerted at
+  05:32:52, rolled back at 05:35:48, "off" at 05:35:49, monitor OK at 05:41. The other chapters showed too:
+  payment errors, agent spans 73 to 491 per 5 min, Kafka lag 1,520, email restarts 16 to 21, product-catalog
+  p95 25.5 s. The nudge has not yet met a real missed notification.
+- **Windows since the first full one:** 03:30 every chapter, rollback 03:35:48; 04:30 every chapter
+  except ad (above).
 
 ### 2026-10-25 · Presenter dashboard for the window; Close line corrected
 - **What:** `datadog/dashboards/demo-window.json`, applied by `dd-apply.py` (new step, matched by title):
