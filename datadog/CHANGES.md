@@ -31,6 +31,24 @@ into git or undone.
 
 ## Log
 
+### 2026-10-26 · Pod monitor also starts the workflow; rollback retries; 14 windows scored
+- **What:**
+  - The pod monitor mentions `@workflow-otel-demo-remediate-ad` too. The workflow runs at most once per
+    20 minutes, so whichever ad monitor fires first starts it.
+  - The workflow's rollback retries every 30 s, 4 times, then ends in a no-op step (`Rollback_failed`).
+  - The latency monitor's message no longer mentions stage mode or `stage.sh`.
+- **Why (02:30 to 15:30 UTC, 14 windows):**
+  - The pod monitor fired at :34 and recovered at :42 to :47 every hour.
+  - The nudge gave a second "on" evaluation at :31 every hour, and ad picked up every :30 edge.
+  - The latency alert came late in 4 hours (05:41, 12:43, 13:40, 14:40). With the 10-minute wait, the
+    rollback then landed at :52 to :54, after the schedule had already turned the flag off at :45, so the
+    workflow fixed nothing in those hours. The pod monitor, always at :34, puts the rollback at about :44.
+  - At 06:43 the rollback got a 502 from the load balancer. GKE's maintenance window (06:00 to 10:00 UTC)
+    was recreating nodes: ad came back as a new pod (`ad-66c6794c6-dr5xd`) and flagd restarted (adHighCpu
+    "off" at 06:40). A retry covers a short outage like that.
+  - The workflow succeeded in the other 12 hours.
+- **Not yet verified:** a window with both changes.
+
 ### 2026-10-26 · A monitor on the ad pod; an always-open alert; the workflow waits 10 minutes
 - **What:**
   - `monitors/ad-pod-cpu-limit.json`: the ad container's CPU over 90% of its limit for 3 min, grouped

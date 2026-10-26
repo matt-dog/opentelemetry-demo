@@ -166,6 +166,28 @@
             "name": "responseParsing",
             "value": "json"
           }
+        ],
+        "errorHandlers": [
+          {
+            "retryStrategy": {
+              "kind": "RETRY_STRATEGY_LINEAR",
+              "linear": {
+                "interval": "30s",
+                "maxRetries": 4
+              }
+            },
+            "fallbackStepName": "Rollback_failed"
+          }
+        ]
+      },
+      {
+        "name": "Rollback_failed",
+        "actionId": "com.datadoghq.core.sleep",
+        "parameters": [
+          {
+            "name": "durationSeconds",
+            "value": 1
+          }
         ]
       }
     ]

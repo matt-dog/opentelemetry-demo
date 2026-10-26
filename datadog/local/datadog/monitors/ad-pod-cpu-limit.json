@@ -2,7 +2,7 @@
   "name": "[otel demo] ad pod at its CPU limit (${ENV_NAME})",
   "type": "query alert",
   "query": "avg(last_3m):sum:container.cpu.usage{kube_cluster_name:${ENV_NAME},kube_namespace:otel-demo,kube_deployment:ad} by {pod_name} / sum:k8s.container.cpu_limit{kube_cluster_name:${ENV_NAME},kube_namespace:otel-demo,kube_deployment:ad} by {pod_name} > 0.9",
-  "message": "The ad container is using over 90% of its CPU limit (pod {{pod_name.name}}), from the Collector's Kubernetes metrics.\n\nFollow it: [ad latency alert](https://app.datad0g.com/monitors/35243022) \u00b7 [ad service](https://app.datad0g.com/apm/services/ad?env=${ENV_NAME}) \u00b7 [recent changes on ad](https://app.datad0g.com/event/explorer?query=service%3Aad%20env%3A${ENV_NAME})\n\nGrouped by pod so it sits on the pod in Kubernetes Explorer, where the hourly demo opens. No notification targets on purpose.",
+  "message": "The ad container is using over 90% of its CPU limit (pod {{pod_name.name}}), from the Collector's Kubernetes metrics.\n\nFollow it: [ad latency alert](https://app.datad0g.com/monitors/35243022) \u00b7 [ad service](https://app.datad0g.com/apm/services/ad?env=${ENV_NAME}) \u00b7 [recent changes on ad](https://app.datad0g.com/event/explorer?query=service%3Aad%20env%3A${ENV_NAME})\n\nGrouped by pod so it sits on the pod in Kubernetes Explorer, where the hourly demo opens. No notification targets on purpose. On alert it also starts the remediation workflow (one run per 20 minutes, whichever ad monitor fires first): {{#is_alert}}@workflow-otel-demo-remediate-ad{{/is_alert}}",
   "tags": [
     "env:${ENV_NAME}",
     "service:ad",
