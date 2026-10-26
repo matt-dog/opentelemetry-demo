@@ -1,0 +1,14 @@
+{
+  "name": "[otel demo] product-catalog error rate (${ENV_NAME})",
+  "type": "query alert",
+  "query": "sum(last_10m):default_zero(sum:trace.server.request.errors{env:${ENV_NAME},service:product-catalog}.as_count()) / sum:trace.server.request.hits{env:${ENV_NAME},service:product-catalog}.as_count() > 0.05",
+  "message": "Error rate on product-catalog is above 5% over 10 minutes, from the OTel-derived trace metrics. It fires all the time on purpose: the scheduler holds productCatalogFailure on for one product (OLJCESPC7Z), about 7.6% of lookups, so a presenter always has an open alert outside the :30 to :45 window. No notification targets on purpose.",
+  "tags": ["env:${ENV_NAME}", "service:product-catalog", "demo:always-open"],
+  "priority": 3,
+  "options": {
+    "thresholds": {"critical": 0.05},
+    "notify_no_data": false,
+    "include_tags": true,
+    "require_full_window": false
+  }
+}

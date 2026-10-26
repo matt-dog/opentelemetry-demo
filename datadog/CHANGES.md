@@ -31,6 +31,31 @@ into git or undone.
 
 ## Log
 
+### 2026-10-26 · A monitor on the ad pod; an always-open alert; the workflow waits 10 minutes
+- **What:**
+  - `monitors/ad-pod-cpu-limit.json`: the ad container's CPU over 90% of its limit for 3 min, grouped
+    by `pod_name`, on the Collector's Kubernetes metrics.
+  - `monitors/product-catalog-error-rate.json`: product-catalog errors over 5% for 10 min. It is in
+    Alert all the time, from the baseline productCatalogFailure rule (one product, about 7.6% of
+    lookups).
+  - `workflows/remediate-ad.json`: waits 600 s before rolling back, up from 180 s.
+  - Doc: the Setup row now gives the always-open alert and the 10-minute window; step 10 says ten
+    minutes.
+- **Why:** Matthew opens in Kubernetes Explorer and wants to see the problem there. Its Monitors column
+  shows monitors "tagged, scoped, or grouped" for a resource. The ad monitors are scoped by
+  `service:ad` on trace metrics, and those carry no pod or deployment tags (`kube_deployment` and
+  `pod_name` are N/A), so the column stayed empty. A monitor grouped by `pod_name` on the Kubernetes
+  metrics can sit on the pod. The 10-minute wait keeps ad at its limit from about :31 to :43 instead
+  of about 5 minutes, which fits Chapter 1's length ("while we've been talking, Datadog fixed it").
+  The always-open alert gives a presenter a starting point outside the window without breaking ad's
+  SLOs. Matthew chose this over making ad fail all day with `adFailure`, which would have taken the
+  availability SLO to about 92% for a week.
+- **Verified:** the pod monitor evaluates one group, `pod_name:ad-66c6794c6-l79bn` (OK between
+  windows). The product-catalog monitor went to Alert within a minute. The live workflow has
+  `durationSeconds: 600`. In the 16:30 window, ad's container ran at 0.30 of its 0.30-core limit from
+  16:31 to 16:38. Not yet checked: whether Explorer's Monitors column shows the pod monitor, and a
+  full window with the new wait.
+
 ### 2026-10-25 · Scheduler notifies each changed flag twice
 - **What:** `scenarios.yaml` writes each flag it changed again a minute later with a fresh
   `metadata.nudge` stamp; the variant is whatever flagd-ui holds then, so a rollback in between sticks.

@@ -1,0 +1,14 @@
+{
+  "name": "[otel demo] ad pod at its CPU limit (${ENV_NAME})",
+  "type": "query alert",
+  "query": "avg(last_3m):sum:container.cpu.usage{kube_cluster_name:${ENV_NAME},kube_namespace:otel-demo,kube_deployment:ad} by {pod_name} / sum:k8s.container.cpu_limit{kube_cluster_name:${ENV_NAME},kube_namespace:otel-demo,kube_deployment:ad} by {pod_name} > 0.9",
+  "message": "The ad container is using over 90% of its CPU limit (pod {{pod_name.name}}), from the Collector's Kubernetes metrics. Grouped by pod so it sits on the pod in Kubernetes Explorer, where the hourly demo opens; the latency monitor and the remediation workflow carry the rest. No notification targets on purpose.",
+  "tags": ["env:${ENV_NAME}", "service:ad", "kube_deployment:ad", "kube_namespace:otel-demo", "kube_cluster_name:${ENV_NAME}", "demo:kubernetes"],
+  "priority": 3,
+  "options": {
+    "thresholds": {"critical": 0.9},
+    "notify_no_data": false,
+    "include_tags": true,
+    "require_full_window": false
+  }
+}
