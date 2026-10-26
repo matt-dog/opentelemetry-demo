@@ -2,7 +2,7 @@
   "name": "[otel demo] ad service p95 latency high (${ENV_NAME})",
   "type": "query alert",
   "query": "avg(last_3m):p95:trace.grpc.server.request{env:${ENV_NAME},service:ad}.rollup(avg, 60) > 0.02",
-  "message": "p95 latency on the ad service is above 20 ms (baseline 3 to 6 ms; adHighCpu takes it to 35 to 130 ms). Evaluated on per-minute p95, the value the graphs show: p95 over shorter buckets holds only a few ad requests and kept the monitor under its threshold and flapping. The scenarios pod turns adHighCpu on from :30 to :45 each hour, UTC. Chapter 1, step 2 of the presenter script. No notification targets on purpose. On alert it starts the remediation workflow, which rolls adHighCpu back after 10 minutes: {{#is_alert}}@workflow-otel-demo-remediate-ad{{/is_alert}}",
+  "message": "p95 latency on the ad service is above 20 ms (baseline 3 to 6 ms; adHighCpu takes it to 35 to 130 ms). Evaluated on per-minute p95, the value the graphs show: p95 over shorter buckets holds only a few ad requests and kept the monitor under its threshold and flapping. The scenarios pod turns adHighCpu on from :30 to :45 each hour, UTC. Chapter 1, step 2 of the presenter script. No notification targets on purpose. The remediation workflow is started by the ad pod CPU monitor, which fires reliably at about :34; this one fires 1 to 10 minutes after :30.",
   "tags": [
     "env:${ENV_NAME}",
     "service:ad",

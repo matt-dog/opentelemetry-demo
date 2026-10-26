@@ -31,6 +31,16 @@ into git or undone.
 
 ## Log
 
+### 2026-10-26 · Only the pod monitor starts the workflow; 8-minute wait
+- **What:** the latency monitor no longer mentions the workflow; the pod monitor does, alone. The wait is
+  480 s, down from 600. The Doc's step 10 and Setup row say so.
+- **Why (16:30 window):** the pod monitor fired at 16:35 and started the workflow at 16:35:06. The latency
+  alert came late again (16:39), started a second run (the 20-minute rate limit is per monitor, not per
+  workflow), then recovered on its own at 16:42. The first run rolled back at 16:45:10, the same minute the
+  schedule turns the flag off, so it is unclear which one did it. The pod monitor has fired on time in all
+  15 hours since it was built; with 8 minutes the rollback lands at about :43, ahead of the schedule. One
+  trigger also means one run per hour.
+
 ### 2026-10-26 · Pod monitor also starts the workflow; rollback retries; 14 windows scored
 - **What:**
   - The pod monitor mentions `@workflow-otel-demo-remediate-ad` too. The workflow runs at most once per
