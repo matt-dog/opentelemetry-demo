@@ -40,7 +40,9 @@ into git or undone.
     lookups).
   - `workflows/remediate-ad.json`: waits 600 s before rolling back, up from 180 s.
   - Doc: the Setup row now gives the always-open alert and the 10-minute window; step 10 says ten
-    minutes.
+    minutes. Step 1 now starts in Kubernetes Explorer (Matthew): sort by CPU usage/limits, open the ad
+    pod's Monitors tab, open the pod monitor. Its message links to the ad latency alert, the ad service
+    page and ad's change events, which is how the presenter follows it into step 2.
 - **Why:** Matthew opens in Kubernetes Explorer and wants to see the problem there. Its Monitors column
   shows monitors "tagged, scoped, or grouped" for a resource. The ad monitors are scoped by
   `service:ad` on trace metrics, and those carry no pod or deployment tags (`kube_deployment` and
