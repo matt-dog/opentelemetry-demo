@@ -31,6 +31,19 @@ into git or undone.
 
 ## Log
 
+### 2026-10-27 · Postgres memory limit 300Mi: the lock chapter OOM-killed it
+- **What:** `values-local.yaml` sets astronomy-db to a 300Mi memory limit (request still the chart's
+  100Mi). Applied live with `kubectl patch` at 18:10 UTC; the next `up.sh` sets the same through Helm.
+- **Why:** astronomy-db had restarted 43 times since the GKE node upgrade on 2026-10-26 06:42, rising to
+  about four OOM kills an hour (22 restarts at 12:00, 43 at 17:00 on 2026-10-27). The last one was at
+  17:44, inside the :42 to :45 lock chapter. The lock queues every catalog read as a waiting
+  connection, and at the chart's 100Mi limit Postgres ran out. With no volume, each kill wiped the
+  database and ran init.sql again (the configmap still holds the MAINTAIN grant). The catalog was down
+  while Postgres restarted, and accounting logged "Order parsing failed" in pairs at :36 to :47 since
+  about 10:44. I missed the restarts when scoring windows, because I did not check astronomy-db.
+- **Verified:** after the patch, the grant is in place, `catalog.products` has 10 rows, and product-catalog
+  reads from the database again. A window with the new limit has not run yet.
+
 ### 2026-10-26 · Only the pod monitor starts the workflow; 8-minute wait
 - **What:** the latency monitor no longer mentions the workflow; the pod monitor does, alone. The wait is
   480 s, down from 600. The Doc's step 10 and Setup row say so.

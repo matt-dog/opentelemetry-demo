@@ -116,6 +116,16 @@ components:
       limits:
         cpu: 300m
         memory: 300Mi
+  astronomy-db:
+    # productCatalogLockContention (scenarios.yaml) queues every catalog read behind a
+    # 30 s table lock, one waiting connection each; at the chart's 100Mi Postgres was
+    # OOMKilled about four times an hour (2026-10-27), and with no volume each kill wiped
+    # the database. The request stays at the chart's 100Mi.
+    resources:
+      requests:
+        memory: 100Mi
+      limits:
+        memory: 300Mi
   fraud-detection:
     # The DDOT SDK in place of the upstream OpenTelemetry Java agent the image
     # ships, for Act 2 (DEMO-PLAN.md): checkout, on the upstream Go SDK, produces
