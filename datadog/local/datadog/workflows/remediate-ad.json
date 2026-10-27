@@ -1,6 +1,6 @@
 {
   "name": "[otel demo] remediate ad latency (${ENV_NAME})",
-  "description": "Act 3, on every ad pod CPU alert (shared demo, no stage mode): open an incident if none is open for ad, wait 8 min (so the throttled pod stays visible in Kubernetes Explorer), then roll back adHighCpu, the change that caused it.",
+  "description": "Act 3, on every ad pod CPU alert (shared demo, no stage mode): open an incident if none is open for ad, wait 6 min (so the throttled pod stays visible in Kubernetes Explorer), then roll back adHighCpu, the change that caused it.",
   "spec": {
     "handle": "otel-demo-remediate-ad",
     "triggers": [
@@ -136,7 +136,7 @@
         "parameters": [
           {
             "name": "durationSeconds",
-            "value": 480
+            "value": 360
           }
         ],
         "outboundEdges": [

@@ -31,6 +31,18 @@ into git or undone.
 
 ## Log
 
+### 2026-10-27 · 6-minute wait; Postgres fix verified
+- **What:** the workflow waits 360 s, down from 480. The pod monitor's message and the Doc's step 10 and
+  Setup row say so.
+- **Why:** the pod monitor fired at :34 to :35 in 24 of 25 hours, but at 18:37 in the 18:30 window. ad was
+  at its full 0.30-core limit from 18:31, so the data was ready by :34 and the delay was the monitor's
+  evaluation. With 8 minutes the rollback landed at 18:45:06, and "off" at 18:45:18 cannot be told apart
+  from the schedule's :45 switch. With 6 minutes the rollback lands at :40 to :43 when the monitor fires at
+  :34 to :37. ad stays red in Kubernetes Explorer from about :31 to :41.
+- **18:30 window, after the Postgres fix:** no restarts outside email. Postgres peaked at about 96 MB
+  during the lock, just under the old 100Mi (105 MB) limit, which is why some hours went over. No
+  "Order parsing failed" errors. product-catalog p95 reached 28 s under the lock.
+
 ### 2026-10-27 · Postgres memory limit 300Mi: the lock chapter OOM-killed it
 - **What:** `values-local.yaml` sets astronomy-db to a 300Mi memory limit (request still the chart's
   100Mi). Applied live with `kubectl patch` at 18:10 UTC; the next `up.sh` sets the same through Helm.
