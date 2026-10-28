@@ -31,6 +31,17 @@ into git or undone.
 
 ## Log
 
+### 2026-10-28 · Profiling out of the presenter flow; the span Logs tab works
+- **What (Doc only):** Chapter 1 drops the profile steps (old 6 and 8). Steps renumbered: Kafka trace 6,
+  collector fleet 7, the fix 8. The transitions, Outro, key messages and discovery table no longer mention
+  the profile.
+- **Why:** the Host Profiler undercounts ad's CPU during the window (about 180 times, DEMO-PLAN.md known
+  limits), so every view of it shows CPU going down during a CPU problem, and APM's Profiling page does not
+  show these profiles. Matthew's call; it can come back once the profiler team answers.
+- **Logs:** the span's Logs tab now shows ad's logs (Matthew, 2026-10-28), so the "Open" item about the
+  "Get started with Log Management" placeholder in the entry below is resolved. The duplicate stdout logs
+  remain.
+
 ### 2026-10-28 · Dashboard: Host Profiler CPU against the container's
 - **What:** `datadog/dashboards/profiler-vs-container-cpu.json` (dd-apply): the ad container's CPU as ms per
   minute (cores x 60,000) as a number and a graph with the 300m limit at 18,000, beside a `flame_graph`
