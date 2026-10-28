@@ -31,6 +31,16 @@ into git or undone.
 
 ## Log
 
+### 2026-10-28 · Dashboard: Host Profiler CPU against the container's
+- **What:** `datadog/dashboards/profiler-vs-container-cpu.json` (dd-apply): the ad container's CPU as ms per
+  minute (cores x 60,000) as a number and a graph with the 300m limit at 18,000, beside a `flame_graph`
+  widget (`profiling_aggregated_profile`, `service:ad`) whose header gives the profiler's average CPU time.
+- **Why:** Matthew asked for proof of the undercount (DEMO-PLAN.md, known limits) to share with the Host
+  Profiler team. The widget schema is not documented; the API accepts `query_string` and `group_by` on
+  the query and rejects other fields.
+- **Verified:** the container query returns 0.30 cores (18,000 ms per minute) for 18:31 to 18:40 UTC on
+  2026-10-28. Not yet looked at: the rendered flame graph widget.
+
 ### 2026-10-28 · Presenter script: steps 2, 4, 5, 6 follow what the screens show
 - **What (Doc only):** step 2 starts from the pod monitor's page (its Changes band puts the adHighCpu
   change at each :30); step 4 uses the span's Infrastructure tab (pod CPU flat at 0.3 cores) in place of a
