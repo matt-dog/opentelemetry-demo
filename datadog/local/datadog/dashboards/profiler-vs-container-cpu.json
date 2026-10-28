@@ -4,7 +4,7 @@
   "layout_type": "ordered",
   "widgets": [
     {"definition": {"type": "note", "background_color": "white", "font_size": "14", "text_align": "left", "show_tick": false, "has_padding": true,
-      "content": "**Pin the time to one window, :31 to :40 UTC.** Left: the container's CPU from the Collector's Kubernetes metrics, converted to ms of CPU per minute (cores x 60,000), the profiler's unit. ad's CPU limit is 300m, which is 18,000 ms per minute. Right: the DDOT Host Profiler's flame graph for ad over the same time; its header gives \"Average CPU Time, per minute\". During the adHighCpu window the container reads about 18,000 and the profiler about 100 to 150."}},
+      "content": "**Pin the time to one window, :31 to :40 UTC.** Left: the container's CPU from the Collector's Kubernetes metrics, converted to ms of CPU per minute (cores x 60,000), the profiler's unit. ad's CPU limit is 300m, which is 18,000 ms per minute. Right: the DDOT Host Profiler's flame graph for ad over the same time; its header gives \"Average CPU Time, per minute\". On 2026-10-27, 19:31 to 19:40 UTC, the container read 17,993 and the profiler 100. At idle the two roughly agree; the profiler misses the burn."}},
     {"definition": {"type": "query_value", "title": "Container CPU, ms per minute (average over the time picker)", "precision": 0, "autoscale": false,
       "requests": [{"response_format": "scalar",
         "queries": [{"data_source": "metrics", "name": "cpu", "query": "avg:container.cpu.usage{kube_cluster_name:${ENV_NAME},kube_namespace:otel-demo,kube_deployment:ad}", "aggregator": "avg"}],
@@ -15,6 +15,7 @@
         "formulas": [{"formula": "cpu * 60000", "alias": "container CPU, ms/min"}]}],
       "markers": [{"value": "y = 18000", "display_type": "error dashed", "label": "300m limit"}]}},
     {"definition": {"type": "flame_graph", "title": "Host Profiler, ad (header: Average CPU Time, per minute)",
-      "requests": [{"query": {"data_source": "profiling_aggregated_profile", "query_string": "service:ad kube_cluster_name:${ENV_NAME}", "group_by": "function"}}]}}
+      "requests": [{"query": {"data_source": "profiling_aggregated_profile", "family": "ebpf",
+        "query_string": "kube_namespace:otel-demo kube_cluster_name:${ENV_NAME} service:ad", "group_by": "function", "filter_operations": []}}]}}
   ]
 }

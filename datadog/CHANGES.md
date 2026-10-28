@@ -38,8 +38,10 @@ into git or undone.
 - **Why:** Matthew asked for proof of the undercount (DEMO-PLAN.md, known limits) to share with the Host
   Profiler team. The widget schema is not documented; the API accepts `query_string` and `group_by` on
   the query and rejects other fields.
-- **Verified:** the container query returns 0.30 cores (18,000 ms per minute) for 18:31 to 18:40 UTC on
-  2026-10-28. Not yet looked at: the rendered flame graph widget.
+- **Verified:** with the widget Matthew fixed in the UI (`"family": "ebpf"` selects Host Profiler data;
+  the profile type and granularity need a `service:` in the search first), 2026-10-27 19:31 to 19:40 UTC
+  reads 17,993 ms per minute in the container and 100 in the profiler. At idle the two roughly agree
+  (about 180 against 90 to 140). Those are the widget settings now in git.
 
 ### 2026-10-28 · Presenter script: steps 2, 4, 5, 6 follow what the screens show
 - **What (Doc only):** step 2 starts from the pod monitor's page (its Changes band puts the adHighCpu
