@@ -31,6 +31,17 @@ into git or undone.
 
 ## Log
 
+### 2026-10-28 · Presenter script: steps 2, 4, 5, 6 follow what the screens show
+- **What (Doc only):** step 2 starts from the pod monitor's page (its Changes band puts the adHighCpu
+  change at each :30); step 4 uses the span's Infrastructure tab (pod CPU flat at 0.3 cores) in place of a
+  metrics tab; step 6 uses the ad pod's Profiles tab in Kubernetes Explorer and names
+  `CPULoad$Logarithmizer.run`; links re-pinned to 19:25 to 19:48 UTC on 2026-10-27. DEMO-PLAN.md records
+  the profiler's CPU undercount.
+- **Open:** the span's Logs tab shows Datadog's "Get started with Log Management" placeholder in place of
+  ad's logs, though the logs exist and carry the trace and span IDs (checked through the API for trace
+  `1e02209f3b6dbab0db337b1d31c7b3e9`). Most likely an org entitlement on matt-dog; unverified. ad and
+  checkout also send every log twice (OTLP with IDs, and stdout through the file log receiver without).
+
 ### 2026-10-27 · 6-minute wait; Postgres fix verified
 - **What:** the workflow waits 360 s, down from 480. The pod monitor's message and the Doc's step 10 and
   Setup row say so.
