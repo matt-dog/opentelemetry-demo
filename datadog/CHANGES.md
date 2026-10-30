@@ -31,6 +31,14 @@ into git or undone.
 
 ## Log
 
+### 2026-10-30 · Outro recaps every step and the rest of the platform
+- **What (Doc only):** the Outro (now 1:30) recaps steps 1 to 8 in order, then names the other problems
+  running in the same window and the product each shows in (Chapters 2 to 6), says every signal was
+  OpenTelemetry with no Agent (RUM excepted, on the Datadog Browser SDK), and that the Agent is there for
+  what the spec doesn't cover yet (slide 21).
+- **Why:** Matthew asked for a fuller close: the steps, the breadth of the platform, what wasn't shown,
+  pure OTel data, and the Agent as the option beyond the spec.
+
 ### 2026-10-30 · Step 8 follows the workflow canvas, then Events
 - **What (Doc only):** step 8 walks the workflow's canvas (Monitor or API trigger, find an open ad
   incident, declare a SEV-3 if none, wait 6 minutes, POST to the rollback endpoint, error path if it
