@@ -37,6 +37,7 @@ into git or undone.
   through checkout and cart to fraud-detection's Kafka consume (Matthew). The presenter unchecks Errors.
   An optional detour in step 6 shows the trace's two errors: checkout's EmptyCart call to cart fails with
   "Wasn't able to connect to redis" (the upstream `cartFailure` flag, held at 10%), yet the order completes.
+  Side trips gets a matching row ("An error inside a successful order").
 - **Why:** opened from fraud-detection, the trace view showed the consume span alone, though the API
   returns it inside checkout's trace with checkout's `publish orders` as parent (checked 2026-10-29).
   Opened from checkout, the waterfall shows the whole flow.
