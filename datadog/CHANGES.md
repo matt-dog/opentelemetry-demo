@@ -31,6 +31,17 @@ into git or undone.
 
 ## Log
 
+### 2026-10-30 · Step 7 shows one collector's traces pipeline in Fleet Automation
+- **What (Doc only):** step 7 (now 1:00) opens a daemon collector's Configuration, Pipeline view (Traces)
+  and walks its fan-out: `datadog/connector` to Datadog, `otlp_grpc/jaeger` to the shop's Jaeger, and the
+  upstream `span_metrics` connector to its Prometheus (`kube-stack-values.yaml`, traces pipeline). It adds
+  Matthew's point that DDOT includes Datadog components not in upstream, so Datadog builds, versions and
+  tests the set together. Matthew added the screenshot and link.
+- **Why:** the view shows the no-lock-in claim on a shareable screen; the Close's Jaeger proof is
+  otherwise a port-forward.
+- **Caveat:** the script says the connector computes APM metrics before the sampling pipeline;
+  `traces/sampling` has no sampler configured, so the demo does not exercise sampling.
+
 ### 2026-10-30 · Step 6 opens one end-to-end checkout trace; the cart error is a detour
 - **What (Doc only):** step 6 and step 5's transition link to trace `bd7afca2f119f9e5f4ef3b3cbe93adc0`
   (2026-10-30 18:11 UTC), opened from checkout's `publish orders` span: 72 spans from load-generator
