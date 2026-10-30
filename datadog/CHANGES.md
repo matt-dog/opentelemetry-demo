@@ -31,6 +31,17 @@ into git or undone.
 
 ## Log
 
+### 2026-10-30 · Goal and framing: breadth and depth on pure OTel data
+- **What (Doc only):** the Goal now says the demo shows how broad and deep Datadog is on OTel data for
+  teams that won't run the Agent, where earlier OTel demos showed OTel features; it links the 2027
+  OpenTelemetry plan (new logos come from OTel-first teams). Why the OpenTelemetry Demo ends on the
+  platform, and a new "Versus other backends" paragraph says what to lean on and to go light on semantic
+  conventions. Audience names the two kinds of room (pure-OTel devotees, pragmatists). Key messages drop
+  the semantic-conventions bullet for no lock-in and "the Agent is there beyond the spec"; the discovery
+  question about OTel attributes becomes "What do you need beyond traces, metrics and logs?"
+- **Why:** Matthew asked to aim the demo at pure OTel prospects against other backends, without
+  overstating semantic convention support, which isn't complete yet.
+
 ### 2026-10-30 · Chapters 2 to 6 fold into Side trips; the Outro is the only close
 - **What (Doc only):** "More chapters, same window", Chapters 2 to 6 and the Close are gone. Side trips is
   one table (Topic, When (UTC), Screen and what to show) with the six scheduled problems in minute order
