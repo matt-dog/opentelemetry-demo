@@ -31,6 +31,17 @@ into git or undone.
 
 ## Log
 
+### 2026-10-30 · Chapters 2 to 6 fold into Side trips; the Outro is the only close
+- **What (Doc only):** "More chapters, same window", Chapters 2 to 6 and the Close are gone. Side trips is
+  one table (Topic, When (UTC), Screen and what to show) with the six scheduled problems in minute order
+  (payment :31, agent :32, frontend images :33, Kafka lag :35, email OOM :38, Postgres lock :42), then the
+  any-time rows (metrics by OTel names, the step 6 cart error). The old RUM sessions, Postgres spans and
+  PostgreSQL and Kafka dashboard rows merged into their problem rows; the unfiltered LLM traces link is
+  dropped for the agent's traces. Setup's "every chapter" wording now names steps, side trips and
+  problems.
+- **Why:** Matthew asked to fold the chapters into side trips, brief and concise, with the Outro as the
+  only close (the Close's Jaeger point is now in step 7 and the Outro).
+
 ### 2026-10-30 · Outro recaps every step and the rest of the platform
 - **What (Doc only):** the Outro (now 1:30) recaps steps 1 to 8 in order, then names the other problems
   running in the same window and the product each shows in (Chapters 2 to 6), says every signal was
