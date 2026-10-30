@@ -31,6 +31,16 @@ into git or undone.
 
 ## Log
 
+### 2026-10-30 · Step 8 follows the workflow canvas, then Events
+- **What (Doc only):** step 8 walks the workflow's canvas (Monitor or API trigger, find an open ad
+  incident, declare a SEV-3 if none, wait 6 minutes, POST to the rollback endpoint, error path if it
+  fails), then Events for `service:ad env:otel-demo`: the completed run, the rollback change event
+  (adHighCpu on to off) and the pod monitor's recovery a minute later. Matthew added both screenshots.
+- **Why:** Matthew asked for the step to describe the two screens in order.
+- **Open:** in Matthew's Events screenshot (2026-10-30, 14:30 window EDT), the ad p95 latency monitor
+  recovered about 5 minutes before the rollback. The script no longer says latency fell after the
+  rollback; why the latency alert recovered first is not checked.
+
 ### 2026-10-30 · Step 7 shows one collector's traces pipeline in Fleet Automation
 - **What (Doc only):** step 7 (now 1:00) opens a daemon collector's Configuration, Pipeline view (Traces)
   and walks its fan-out: `datadog/connector` to Datadog, `otlp_grpc/jaeger` to the shop's Jaeger, and the
