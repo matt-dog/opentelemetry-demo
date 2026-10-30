@@ -31,6 +31,18 @@ into git or undone.
 
 ## Log
 
+### 2026-10-30 · Step 6 opens one end-to-end checkout trace; the cart error is a detour
+- **What (Doc only):** step 6 and step 5's transition link to trace `bd7afca2f119f9e5f4ef3b3cbe93adc0`
+  (2026-10-30 18:11 UTC), opened from checkout's `publish orders` span: 72 spans from load-generator
+  through checkout and cart to fraud-detection's Kafka consume (Matthew). The presenter unchecks Errors.
+  An optional detour in step 6 shows the trace's two errors: checkout's EmptyCart call to cart fails with
+  "Wasn't able to connect to redis" (the upstream `cartFailure` flag, held at 10%), yet the order completes.
+- **Why:** opened from fraud-detection, the trace view showed the consume span alone, though the API
+  returns it inside checkout's trace with checkout's `publish orders` as parent (checked 2026-10-29).
+  Opened from checkout, the waterfall shows the whole flow.
+- **Open:** the link is a fixed trace from today, outside the pinned 27 Oct window, so it stops working
+  when the spans pass retention (likely about 15 days; unverified for matt-dog).
+
 ### 2026-10-28 · Profiling out of the presenter flow; the span Logs tab works
 - **What (Doc only):** Chapter 1 drops the profile steps (old 6 and 8). Steps renumbered: Kafka trace 6,
   collector fleet 7, the fix 8. The transitions, Outro, key messages and discovery table no longer mention
