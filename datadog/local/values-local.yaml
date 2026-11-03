@@ -72,6 +72,11 @@ components:
         value: claude-haiku-5-5
       - name: USE_VCR
         value: "False"
+      # Agent Observability converts OTel GenAI spans only when a span in the
+      # trace carries dd_llmobs_enabled=true (opt-in since 2026-10-07). The
+      # chart appends _EXTRA to the service's OTEL_RESOURCE_ATTRIBUTES.
+      - name: OTEL_RESOURCE_ATTRIBUTES_EXTRA
+        value: dd_llmobs_enabled=true
       - name: ANTHROPIC_API_KEY
         valueFrom:
           secretKeyRef: {name: agent-llm, key: ANTHROPIC_API_KEY}

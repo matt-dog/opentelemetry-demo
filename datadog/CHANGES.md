@@ -31,6 +31,25 @@ into git or undone.
 
 ## Log
 
+### 2026-11-02 · The agent opts in to Agent Observability (`dd_llmobs_enabled=true`)
+- **What:** `local/values-local.yaml` sets `OTEL_RESOURCE_ATTRIBUTES_EXTRA=dd_llmobs_enabled=true`
+  on the agent; the chart appends it to the service's `OTEL_RESOURCE_ATTRIBUTES`
+  (`service.version=3.1.0,dd_llmobs_enabled=true`, checked with `helm template`).
+- **Why:** since 2026-10-07, converting OTel GenAI spans into Agent Observability is opt-in, by
+  setting `dd_llmobs_enabled=true` on any span in the trace. Orgs in the
+  `trace-router-enable-llmobs-processor` feature flag (those that sent OTel data to Agent
+  Observability between Sep 6 and Oct 6, 2026) keep automatic conversion. Sources: the
+  [Troubleshooting Agent Observability: OpenTelemetry](https://datadoghq.atlassian.net/wiki/spaces/TS/pages/6253609800)
+  page and the [public docs](https://docs.datadoghq.com/llm_observability/instrument/otel_instrumentation/#enabling-llm-observability-conversion).
+  matt-dog converts the agent's spans without the attribute (checked 2026-11-03: Agent Observability
+  has them all through 2026-11-02, before the change), so it likely has the flag; not confirmed. The
+  attribute is for the orgs the demo moves to: plain OTel configuration, no feature flag needed.
+- **Checked:** applied 2026-11-02 22:17Z; the agent's spans carry `dd_llmobs_enabled: "true"` in APM
+  and keep converting (`ml_app:agent`). A one-span test sent straight to OTLP intake
+  (`dd-otlp-source=llmobs`, service `llmobs-probe`) also converted, and left that one stray app.
+- **Note:** on 2026-11-02 the Agent Observability spans API returned nothing for windows that, a
+  day later, hold spans. Recheck such a window later before calling a gap.
+
 ### 2026-10-30 · Goal and framing: breadth and depth on pure OTel data
 - **What (Doc only):** the Goal now says the demo shows how broad and deep Datadog is on OTel data for
   teams that won't run the Agent, where earlier OTel demos showed OTel features; it links the 2027
