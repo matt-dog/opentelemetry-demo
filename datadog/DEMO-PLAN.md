@@ -169,8 +169,8 @@ About 24 incidents a day, all resolved; open them every few hours instead if tha
   DDOT versions; slide 24 names released tags.
 - The ad load threads are unnamed (`Thread-N`); naming them means changing upstream code.
 - No trace-to-profile link yet (Host Profiler preview).
-- Fixed 2026-11-03 by sampling 19 times a second (CHANGES.md); the profiler now reads about 1.3 times
-  the container's CPU in the window, checked on one window. Before that, the Host Profiler
+- Fixed 2026-11-03 by sampling 19 times a second (CHANGES.md); the profiler now reads 1.15 to 1.31
+  times the container's CPU in the window (three windows, 14:31 to 16:41 UTC). Before that, the Host Profiler
   undercounted ad's CPU during the window by about 100 times: on 2026-10-28 it showed
   152 ms of CPU a minute for 18:29 to 18:37 UTC, while the container used 0.30 cores (about 18 s a
   minute). The function is right: `CPULoad$Logarithmizer.run` appears only in the window (comparison on

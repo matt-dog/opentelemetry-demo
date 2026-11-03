@@ -48,9 +48,12 @@ into git or undone.
   | 13:50 to 14:00, idle | 20 | 9 | 0.0017 | |
   | 14:15 to 14:25, idle | 19 | 8 | 0.0015 | |
   | 14:31 to 14:41, adHighCpu on | 19 | 10 | 0.39 | 0.30 (`container.cpu.usage`) |
+  | 15:31 to 15:41, adHighCpu on | 19 | 10 | 0.39 | 0.30 |
+  | 16:15 to 16:25, idle | 19 | 9 | 0.002 | 0.003 |
+  | 16:31 to 16:41, adHighCpu on | 19 | 9 | 0.35 | 0.30 |
 
-- **Open:** the profiler now reads about 1.3 times the container's CPU; why is not checked. Check
-  more windows before putting profiling back in the script.
+- **Open:** in the window the profiler reads 1.15 to 1.31 times the container's CPU; why it reads high
+  is not checked. 16:31 had 9 profiles for 10 minutes; not checked which minute is missing.
 
 ### 2026-11-03 · `up.sh`: the shop's Helm upgrade forces past the `postgresql-init` conflict
 - **What:** `local/up.sh` runs the shop's `helm upgrade` with `--force-conflicts`.
