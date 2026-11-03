@@ -107,8 +107,11 @@ kubectl -n "$NS" create configmap load-generator-locustfile \
 kubectl -n "$NS" create secret generic agent-llm \
   --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# --force-conflicts: the grant below edits the chart's postgresql-init configmap with
+# kubectl, so Helm's server-side apply finds another owner of init.sql and refuses the
+# upgrade. Helm takes the field back (the chart's init.sql), and the grant is re-added below.
 helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
-  --version "$DEMO_CHART_VERSION" --namespace "$NS" \
+  --version "$DEMO_CHART_VERSION" --namespace "$NS" --force-conflicts \
   --values "$HERE/values-local.yaml" >/dev/null
 # productCatalogLockContention (3.1.0) takes LOCK TABLE catalog.products, which the chart's
 # init.sql does not allow (SELECT only: "permission denied for table products"). MAINTAIN

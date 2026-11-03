@@ -31,6 +31,18 @@ into git or undone.
 
 ## Log
 
+### 2026-11-03 · `up.sh`: the shop's Helm upgrade forces past the `postgresql-init` conflict
+- **What:** `local/up.sh` runs the shop's `helm upgrade` with `--force-conflicts`.
+- **Why:** the grant step edits the chart's `postgresql-init` configmap with `kubectl apply`, so
+  Helm 4's server-side apply found another owner of `.data.init.sql` and failed the upgrade
+  (revision 4, 2026-11-02). `set -e` then stopped `up.sh` before the shopper, scenarios, contrib
+  collector and remediator steps. With the flag, Helm takes the field back and the grant step
+  re-adds the grant. Checked 2026-11-03 13:54Z: revision 5 deployed, every step ran, grant in the
+  configmap and in the database (`has_table_privilege` true).
+- **Open:** the kube-stack step still prints "cannot reuse a name that is still in use" and a
+  missing `ciliumnetworkpolicy` resource type; the installer carries on and its release deploys.
+  Not checked whether these are new.
+
 ### 2026-11-02 · The agent opts in to Agent Observability (`dd_llmobs_enabled=true`)
 - **What:** `local/values-local.yaml` sets `OTEL_RESOURCE_ATTRIBUTES_EXTRA=dd_llmobs_enabled=true`
   on the agent; the chart appends it to the service's `OTEL_RESOURCE_ATTRIBUTES`
