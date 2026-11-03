@@ -31,6 +31,27 @@ into git or undone.
 
 ## Log
 
+### 2026-11-03 · Host Profiler samples 19 times a second, so it counts a throttled ad
+- **What:** `local/kube-stack-values.yaml` sets `receivers.profiling.samples_per_second: 19` on the
+  Host Profiler (default 20). The key was checked against the image in throwaway pods: accepted under
+  `profiling`, rejected under `ebpf_collector` and `profiler_options`, as a bogus key would be.
+- **Why:** Martin Levesque's "CPU discrepancy investigation" notebook: in the window ad is throttled in
+  every 100 ms CFS period after a few ms of running. At 20 a second the 50 ms sample interval divides
+  the period, so samples stay locked to the throttled part of it (our reading; the notebook says
+  samples likely land while ad is throttled). 52.6 ms drifts across the period.
+- **Checked** (one window each, `service:ad`, from the profiles' `ebpf_cpu_cores`):
+
+  | Window (UTC, 2026-11-03) | Rate | Profiles | Profiler cores | Container cores |
+  |---|---|---|---|---|
+  | 12:31 to 12:41, adHighCpu on | 20 | 0 | 0.000 | about 0.30 |
+  | 13:31 to 13:41, adHighCpu on | 20 | 1 | 0.000 | about 0.30 |
+  | 13:50 to 14:00, idle | 20 | 9 | 0.0017 | |
+  | 14:15 to 14:25, idle | 19 | 8 | 0.0015 | |
+  | 14:31 to 14:41, adHighCpu on | 19 | 10 | 0.39 | 0.30 (`container.cpu.usage`) |
+
+- **Open:** the profiler now reads about 1.3 times the container's CPU; why is not checked. Check
+  more windows before putting profiling back in the script.
+
 ### 2026-11-03 · `up.sh`: the shop's Helm upgrade forces past the `postgresql-init` conflict
 - **What:** `local/up.sh` runs the shop's `helm upgrade` with `--force-conflicts`.
 - **Why:** the grant step edits the chart's `postgresql-init` configmap with `kubectl apply`, so

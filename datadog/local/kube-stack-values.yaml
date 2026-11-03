@@ -109,6 +109,13 @@ collectors:
 
   host-profiler:
     config:
+      receivers:
+        # 19 samples a second, not the default 20. At 20 the 50 ms sample interval divides the
+        # 100 ms CFS period, so samples keep landing in the same part of each period and miss a
+        # throttled container's short bursts (ad at its 300m limit read about 1/180th of its CPU).
+        # 19 (52.6 ms) drifts across the period. Key checked against the image on 2026-11-03.
+        profiling:
+          samples_per_second: 19
       processors:
         resource/dd_hostname: *dd_hostname
       service:
