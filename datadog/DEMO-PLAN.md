@@ -179,6 +179,9 @@ About 24 incidents a day, all resolved; open them every few hours instead if tha
   Profiles tab in Kubernetes Explorer does.
 - The DDOT exporters' own host metadata still reports `<node>.dd-dev-otelpmdev`, so the host
   list shows each node a second time with only `otel` on it, and Fleet Automation uses that name.
+- Fleet Automation's Kubernetes view shows no cluster: it lists clusters with a Datadog Agent. Support
+  for collector-only clusters is due later in November 2026 (Jessica, via Matthew, 2026-11-03). Step 7
+  uses the Hosts view.
 - The DDOT SDK's own logs still don't reach Datadog (why `ad` stays upstream).
 - No Datadog OTel dashboard for Redis yet (slide 26 roadmap); its metrics arrive.
 - Resolving the workflow's incident needs an Incident Management seat (403 "Seat Required"); the

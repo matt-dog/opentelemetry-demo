@@ -26,6 +26,13 @@ defaultCRConfig:
       datadog/exporter:
         metrics:
           resource_attributes_as_tags: true
+    # The collectors' own telemetry names their cluster, which the Datadog extension reports to
+    # Fleet Automation (required for gateway topology; tried 2026-11-03 for the Kubernetes view).
+    # The installer uses the same value for k8s.cluster.name (K8S_CLUSTER_NAME=$ENV_NAME in up.sh).
+    service:
+      telemetry:
+        resource:
+          k8s.cluster.name: __ENV_NAME__
 
 collectors:
   daemon:

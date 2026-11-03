@@ -31,6 +31,30 @@ into git or undone.
 
 ## Log
 
+### 2026-11-03 · Collectors name their cluster in their own telemetry
+- **What:** `local/kube-stack-values.yaml` sets `service.telemetry.resource.k8s.cluster.name` to the env
+  name (`otel-demo` on GKE, the same value the installer uses) in the config the daemon and gateway
+  collectors share. Live from 18:47Z; the host profilers don't use that config.
+- **Why:** Fleet Automation's Kubernetes view showed "0 Clusters" while the Hosts view listed the three
+  collectors. The Datadog extension docs require this attribute for gateway topology, so it was the one
+  documented cluster label to try. It did not make the cluster appear (checked by Matthew 23 minutes
+  later). Per Matthew, Jessica confirmed that collector-only clusters in the Kubernetes view are coming
+  later in November 2026. Kept, since the topology view needs it.
+
+### 2026-11-03 · Step 4 gets a profiler detour: compare before and during the problem
+- **What (Doc only):** step 4 has an optional detour after "ad is out of CPU": open Profiling for
+  `service:ad env:otel-demo` and Compare A (:15 to :25) with B (:31 to :41). CPU per minute goes from
+  about 0.1 s to about 23 s, and nearly all of B is one path marked Only in B (`os::javaTimeMillis`,
+  `clock_gettime`); presenters lead with the code path, since the totals read about 1.3 times high. The link
+  (Matthew's) opens the Comparison page with A at 14:15 and B at 14:31 UTC on 2026-11-03, the first window
+  after the 19 a second fix; the other links stay on 27 Oct.
+- **Why:** Matthew asked for a place in the story to compare ad's CPU in the Profiling page's Compare view
+  when the problem starts, now that the Host Profiler counts the throttled container (entry below).
+- **Checked:** Matthew's Comparison screenshot, A 14:15 to 14:25 and B 14:31 to 14:41 UTC on 3 Nov:
+  110 ms against 23.28 s a minute (+20987%), the timeline flat in A and at about 0.4 cores in B.
+  `CPULoad$Logarithmizer.run` stays inside the collapsed Standard Library node there, so the step
+  names the clock calls on screen.
+
 ### 2026-11-03 · Host Profiler samples 19 times a second, so it counts a throttled ad
 - **What:** `local/kube-stack-values.yaml` sets `receivers.profiling.samples_per_second: 19` on the
   Host Profiler (default 20). The key was checked against the image in throwaway pods: accepted under
