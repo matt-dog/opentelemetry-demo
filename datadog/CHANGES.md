@@ -50,8 +50,8 @@ into git or undone.
   Checked in matt-dog from 18:03Z: 3 sessions in about 3 minutes (one per round), about 150 records
   each, 89% resource timing, plus Web Vitals (LCP, FCP, TTFB, CLS, INP), clicks with CSS selectors,
   navigations and console.
-- **Known:** these are log records in Logs; whether RUM can show them as sessions is not known (asked
-  of the browser SIG side). The Collector's Kubernetes attributes tag them with the frontend-proxy pod
+- **Known:** these are log records in Logs; whether RUM can show them as sessions is not known (to ask
+  Maxime in the thread, not yet asked). The Collector's Kubernetes attributes tag them with the frontend-proxy pod
   (`service.instance.id` too), since that is the connection they arrive on.
 
 ### 2026-11-12 · The agent's recorded responses keep their token usage on playback
