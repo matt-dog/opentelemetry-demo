@@ -106,6 +106,10 @@ kubectl -n "$NS" create configmap load-generator-locustfile \
 kubectl -n "$NS" create configmap agent-cassette \
   --from-file=azure_gpt-5.5_cassette.yaml="$HERE/agent/azure_gpt-5.5_cassette.yaml" \
   --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f - >/dev/null
+# The image's patch_vcr.py with `usage` kept (agent/patch_vcr.py), so the counts survive playback.
+kubectl -n "$NS" create configmap agent-patch-vcr \
+  --from-file=patch_vcr.py="$HERE/agent/patch_vcr.py" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 # The agent's Anthropic key, from before it ran on recorded responses (2026-11-12).
 kubectl -n "$NS" delete secret agent-llm --ignore-not-found >/dev/null
 # --force-conflicts: the grant below edits the chart's postgresql-init configmap with
@@ -114,8 +118,10 @@ kubectl -n "$NS" delete secret agent-llm --ignore-not-found >/dev/null
 helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
   --version "$DEMO_CHART_VERSION" --namespace "$NS" --force-conflicts \
   --values "$HERE/values-local.yaml" >/dev/null
-# VCR reads the cassette at each call, but restart so a new one is in place at once.
-kubectl -n "$NS" rollout restart deploy/agent >/dev/null
+# The agent (patch_vcr.py) and the load generator (locustfile.py) mount files by subPath,
+# which does not follow ConfigMap changes, and Helm does not restart them when only a
+# ConfigMap changed; restart both so this run's files are the ones in use.
+kubectl -n "$NS" rollout restart deploy/agent deploy/load-generator >/dev/null
 # productCatalogLockContention (3.1.0) takes LOCK TABLE catalog.products, which the chart's
 # init.sql does not allow (SELECT only: "permission denied for table products"). MAINTAIN
 # allows the lock without data writes (Postgres 17+). astronomy-db has no volume and runs
@@ -134,6 +140,8 @@ if [ "$(kubectl -n "$NS" exec deploy/astronomy-db -- psql -U postgres -d astrono
 fi
 
 kubectl apply -f "$HERE/shopper.yaml" >/dev/null
+# shop.py is read once at start, so restart for a changed ConfigMap.
+kubectl -n "$NS" rollout restart deploy/shopper >/dev/null
 # The scenarios pod posts a Datadog change event at every flag flip.
 kubectl -n "$NS" create configmap scenarios-env --from-literal=DD_ENV="$ENV_NAME" --from-literal=DD_SITE="$DD_SITE" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null

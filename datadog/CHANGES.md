@@ -31,6 +31,22 @@ into git or undone.
 
 ## Log
 
+### 2026-11-12 · The agent's recorded responses keep their token usage on playback
+- **What:** `local/agent/patch_vcr.py`, the image's `src/agents/patch_vcr.py` with `"usage"` taken out
+  of the keys `clean_response` drops, mounted over it from the `agent-patch-vcr` ConfigMap (`up.sh`).
+- **Why:** after `0307366c` the chat replayed but the spans had no tokens. vcrpy runs
+  `before_record_response` (`clean_response`) on every entry it loads (`Cassette._load` calls
+  `append`), not only when recording, so the usage `add-usage.py` writes was stripped before
+  ChatOpenAI saw it. With the fix the agent's `ChatLLM.chat` spans carry `gen_ai.usage.*` (checked
+  in matt-dog at 16:31Z: 793 in / 46 out, 2455 / 268, and so on, the estimates from the cassette),
+  and Agent Observability prices them (`cost_estimate_status:success`, model matched as azure
+  gpt-5.5; 889 in / 31 out came to $0.0054).
+- **Also:** `up.sh` restarts the agent, the load generator and the shopper on every run. The first
+  two mount files by subPath and the shopper reads `shop.py` once, so after `0307366c` both kept
+  sending the Claude-era prompts and every one missed the cassette (21 errors in Agent
+  Observability, 16:31Z to 16:44Z). With `aiRunawayAgent` on (:32 to :45) only "Show all available
+  products in the store." is recorded, so the other two prompts error in that window.
+
 ### 2026-11-12 · The shop's agent on recorded responses, with estimated tokens and cost
 - **What:** the `agent` block in `local/values-local.yaml` drops the Claude override (the `llm.py`
   ConfigMap, the `langchain-anthropic` install, `LLM_MODEL`, `USE_VCR=False`, the key), so the chart's

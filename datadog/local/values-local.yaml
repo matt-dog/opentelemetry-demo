@@ -66,13 +66,22 @@ components:
     # prompts in the cassette answer (the chatbot's sample buttons, each a new
     # chat); any other prompt, or a follow-up in the same chat, misses. Claude
     # Haiku 5.5 until 2026-11-12 (CHANGES.md).
+    # vcrpy runs the image's clean_response on every entry it loads, and that
+    # drops `usage`, so agent/patch_vcr.py (the image's, keeping usage) is
+    # mounted over it from the agent-patch-vcr ConfigMap up.sh makes.
     additionalVolumeMounts:
       - name: agent-fixtures
         mountPath: /app/fixtures/vcr_cassettes
+      - name: agent-patch-vcr
+        mountPath: /app/src/agents/patch_vcr.py
+        subPath: patch_vcr.py
     additionalVolumes:
       - name: agent-fixtures
         configMap:
           name: agent-cassette
+      - name: agent-patch-vcr
+        configMap:
+          name: agent-patch-vcr
     envOverrides:
       # A miss is sent on to LLM_BASE_URL. The chart's https://local-llm.com is a
       # real public host (resolved 2026-11-12), so point it at a closed local
