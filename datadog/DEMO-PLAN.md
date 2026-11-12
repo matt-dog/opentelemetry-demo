@@ -52,7 +52,7 @@ Semantic conventions throughout: filter by `service.name`, `deployment.environme
   contrib Collector: the DDOT Collector does not ship those receivers. That Collector
   also gives Fleet Automation an upstream row and shows a mixed pipeline.
 - RUM, with the Datadog Browser SDK (a Datadog component, though no Agent).
-- LLM Observability on the shop's agent (Claude).
+- LLM Observability on the shop's agent (recorded responses since 2026-11-12).
 
 ## Work, in order
 

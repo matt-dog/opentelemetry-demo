@@ -16,7 +16,6 @@ As of 2026-10-25.
 | Env tag | `otel-demo` (GKE), `otel-demo-local` (Rancher Desktop) |
 | API key | `op://Employee/ddot-lab/matt-dog-dd-api-key` |
 | Application key | `op://Employee/ddot-lab/matt-dog-dd-app-key` (no scopes; owner Matthew, Datadog Admin Role) |
-| Anthropic key (shop's agent) | `op://Employee/ddot-lab/ANTHROPIC_API_KEY` |
 
 Until 2026-10-22 the demo sent to the ddstaging org on datadoghq.com (env
 `otel-demo-gke-blog`). `up.sh` still goes there with `DD_SITE`, `DD_API_KEY_REF`

@@ -143,7 +143,7 @@ checks and does nothing.
 | Kafka propagation | [link](https://app.datad0g.com/apm/traces?query=service%3Afraud-detection%20env%3Aotel-demo) | Producer and consumer spans in one trace (Data Streams Monitoring needs the Agent) |
 | Database spans | [link](https://app.datad0g.com/apm/traces?query=env%3Aotel-demo%20%40db.system.name%3Apostgresql) | product-catalog's PostgreSQL spans carry the full statement (`db.system.name`, current semantic conventions); cart's Valkey spans carry the command. Full DBM needs the Agent |
 | RUM | [link](https://app.datad0g.com/rum/sessions?query=%40application.id%3A8d3ef4e9-394d-4519-9cbe-aeee1a60d120) | A browser click to its backend trace (Datadog Browser SDK, which is not the Agent) |
-| LLM Observability | [link](https://app.datad0g.com/llm/traces) | The shop's agent on Claude, with tokens and cost (slide 13) |
+| LLM Observability | [link](https://app.datad0g.com/llm/traces) | The shop's agent on recorded responses (three prompts), with estimated tokens and cost (slide 13) |
 
 ## If something looks wrong
 

@@ -41,7 +41,7 @@ and images with overrides:
 | Metric tags | Datadog names only (`pod_name`, `kube_cluster_name`) | OTel names too (`metrics.resource_attributes_as_tags`) | filter metrics by `k8s.cluster.name` and the rest |
 | `scenarios` (new pod) | flags changed by hand | holds flags to a schedule in `scenarios.yaml`: `adHighCpu` on from :30 to :45 each hour, UTC | a problem at known times with a quiet baseline between, for anomaly monitors and screenshots |
 | ad CPU limit | none | 300m | adHighCpu throttles the JVM, so GetAds slows; with no limit its load threads take spare cores and requests stay at a few ms |
-| agent LLM | recorded responses for three prompts | Claude Haiku 5.5 through LangChain's Anthropic client (`llm.py` replaced from a ConfigMap) | real tokens and cost in Agent Observability |
+| agent LLM | recorded responses (`USE_VCR=True`) from the chart's cassette: no token usage, no `aiRunawayAgent` run | `src/agent`'s newer `azure_gpt-5.5` cassette with estimated token usage added (`agent/add-usage.py`), in place of the chart's; misses go to a closed local port | free, no key; tokens and cost in Agent Observability; only the chatbot's three sample prompts answer |
 | RUM | none | Datadog Browser SDK added to the shop's and chatbot's pages by an Envoy Lua filter (`frontend-proxy/envoy.tmpl.yaml`) | RUM, Session Replay, user action to backend trace |
 | Datadog monitors and log index | none | `datadog/` templates applied by `dd-apply.py` (run by `up.sh`): the ad latency monitors, the RUM application, and a log index for the env ahead of `main` | the setup is rebuilt from git in any env or org; `${ENV_NAME}` is filled in per env |
 
@@ -52,8 +52,8 @@ stack.
 
 ## Run it
 
-Needs `gcloud` signed in, Helm, and the keys: `op` signed in, or `DD_API_KEY`, `DD_APP_KEY` and
-`ANTHROPIC_API_KEY` set in the environment (read once each). The kube-stack installer is copied
+Needs `gcloud` signed in, Helm, and the keys: `op` signed in, or `DD_API_KEY` and `DD_APP_KEY`
+set in the environment (read once each). The kube-stack installer is copied
 into `kube-stack/` (`KUBE_STACK_DIR` overrides the path).
 
 ```bash

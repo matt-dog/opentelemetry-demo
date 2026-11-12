@@ -31,6 +31,28 @@ into git or undone.
 
 ## Log
 
+### 2026-11-12 · The shop's agent on recorded responses, with estimated tokens and cost
+- **What:** the `agent` block in `local/values-local.yaml` drops the Claude override (the `llm.py`
+  ConfigMap, the `langchain-anthropic` install, `LLM_MODEL`, `USE_VCR=False`, the key), so the chart's
+  defaults apply: `USE_VCR=True`, `LLM_MODEL=azure/gpt-5.5`, with the cassette from the chart's
+  `agent-fixtures` ConfigMap (the image itself has no `fixtures/`). That cassette has no token usage
+  and no `aiRunawayAgent` run (15 entries), so `local/agent/` holds `src/agent`'s newer one (29) with a
+  `usage` block added to each of its 25 chat responses by `local/agent/add-usage.py` (tiktoken
+  `o200k_base` over the request and response, so the counts are estimates). `up.sh` makes the
+  `agent-cassette` ConfigMap (server-side apply, it is over 256 KB) and restarts the agent; the
+  chart's `agent-fixtures` volume points at it. `LLM_BASE_URL` is `http://127.0.0.1:9`,
+  so a miss fails at once instead of going to the chart's `https://local-llm.com`, a public host.
+  `dd_llmobs_enabled=true` stays. The load generator and the shopper send only the cassette's three
+  prompts (the chatbot's sample buttons). `up.sh` no longer reads `ANTHROPIC_API_KEY` and deletes the
+  old `agent-llm` secret. The image's agent code is the same as `src/agent` here, so the recorded
+  requests match.
+- **Why:** Matthew wanted the chat off his Anthropic key and on something free, and kept tokens and
+  cost in Agent Observability (slide 13). Upstream's recorder drops `usage`, so it is put back;
+  Datadog prices `azure/gpt-5.5` ($5 in, $30 out per million tokens, catalog checked 2026-11-12).
+  Costs: the numbers are estimates from a recording, and any other prompt, including one typed in
+  the chatbot or a follow-up in the same chat, misses the cassette and returns an error.
+  `aiRunawayAgent` still replays (the cassette holds the 20-call run).
+
 ### 2026-11-03 · Collectors name their cluster in their own telemetry
 - **What:** `local/kube-stack-values.yaml` sets `service.telemetry.resource.k8s.cluster.name` to the env
   name (`otel-demo` on GKE, the same value the installer uses) in the config the daemon and gateway

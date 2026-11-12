@@ -25,7 +25,7 @@ components:
       # each user flow shows in Jaeger as several root spans.
       - name: OTEL_EXPORTER_OTLP_ENDPOINT
         value: http://$(OTEL_COLLECTOR_NAME):4317
-    # The image's locustfile with shopping prompts for the agent on Claude
+    # The image's locustfile with the OTLP and gen_ai span changes
     # (load-generator/locustfile.py; up.sh makes the ConfigMap from it).
     mountedConfigMaps:
       - name: locustfile
@@ -56,62 +56,34 @@ components:
         valueFrom:
           secretKeyRef: {name: rum-config, key: DD_RUM_SITE}
   agent:
-    # The shop's AI agent on a real Claude model instead of its recorded
-    # responses, so Agent Observability shows real tokens and cost. llm.py is
-    # replaced with the same ChatLLM class on LangChain's Anthropic client
-    # (provider "anthropic"); the aiSlowResponse flag still applies. The image
-    # lacks langchain-anthropic, so it is installed at start (1.7.2 is the
-    # newest that fits the image's langchain-core 1.6.3). The key comes from the
-    # agent-llm secret that up.sh creates from 1Password.
-    command:
-      - sh
-      - -c
-      - pip install -q --no-cache-dir langchain-anthropic==1.7.2 && exec python run.py
+    # The chart's defaults for the model: recorded responses (USE_VCR=True,
+    # LLM_MODEL azure/gpt-5.5), so no LLM key. The chart's cassette (its
+    # agent-fixtures ConfigMap) has no token usage and no aiRunawayAgent run,
+    # so its volume points at ours instead: src/agent's newer azure_gpt-5.5
+    # cassette with estimated usage added (agent/add-usage.py; up.sh makes the
+    # agent-cassette ConfigMap), so Agent Observability shows tokens and cost.
+    # The two lists restate the chart's, which these replace. Only the three
+    # prompts in the cassette answer (the chatbot's sample buttons, each a new
+    # chat); any other prompt, or a follow-up in the same chat, misses. Claude
+    # Haiku 5.5 until 2026-11-12 (CHANGES.md).
+    additionalVolumeMounts:
+      - name: agent-fixtures
+        mountPath: /app/fixtures/vcr_cassettes
+    additionalVolumes:
+      - name: agent-fixtures
+        configMap:
+          name: agent-cassette
     envOverrides:
-      - name: LLM_MODEL
-        value: claude-haiku-5-5
-      - name: USE_VCR
-        value: "False"
+      # A miss is sent on to LLM_BASE_URL. The chart's https://local-llm.com is a
+      # real public host (resolved 2026-11-12), so point it at a closed local
+      # port: a miss fails at once and nothing leaves the cluster.
+      - name: LLM_BASE_URL
+        value: http://127.0.0.1:9
       # Agent Observability converts OTel GenAI spans only when a span in the
       # trace carries dd_llmobs_enabled=true (opt-in since 2026-10-07). The
       # chart appends _EXTRA to the service's OTEL_RESOURCE_ATTRIBUTES.
       - name: OTEL_RESOURCE_ATTRIBUTES_EXTRA
         value: dd_llmobs_enabled=true
-      - name: ANTHROPIC_API_KEY
-        valueFrom:
-          secretKeyRef: {name: agent-llm, key: ANTHROPIC_API_KEY}
-    mountedConfigMaps:
-      - name: claude-llm
-        mountPath: /app/src/agents/llm.py
-        subPath: llm.py
-        data:
-          llm.py: |
-            # Replaces the demo's llm.py (datadog/local/values-local.yaml).
-            import asyncio
-            import os
-            import time
-
-            from langchain_anthropic import ChatAnthropic
-            from src.agents.feature_flags import get_int_feature_flag
-
-
-            class ChatLLM(ChatAnthropic):
-                def __init__(self, **kwargs):
-                    kwargs.setdefault("model", os.getenv("LLM_MODEL", "claude-haiku-5-5"))
-                    kwargs.setdefault("max_tokens", int(os.getenv("LLM_MAX_TOKENS", "16000")))
-                    super().__init__(**kwargs)
-
-                def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-                    delay_ms = get_int_feature_flag("aiSlowResponse")
-                    if delay_ms:
-                        time.sleep(delay_ms / 1000)
-                    return super()._generate(messages, stop, run_manager, **kwargs)
-
-                async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
-                    delay_ms = get_int_feature_flag("aiSlowResponse")
-                    if delay_ms:
-                        await asyncio.sleep(delay_ms / 1000)
-                    return await super()._agenerate(messages, stop, run_manager, **kwargs)
   ad:
     # A CPU limit, so adHighCpu (scenarios.yaml) throttles the whole JVM and
     # GetAds slows; with no limit its load threads take spare cores and requests

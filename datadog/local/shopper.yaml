@@ -16,9 +16,10 @@ data:
 
     BASE = "http://frontend-proxy:8080"
     QUESTIONS = [
-        "Any deals on telescopes today?",
-        "I just bought a telescope. What accessory would you recommend, and is it on sale?",
-        "What's on promotion right now, and how much is it in GBP?",
+        # The prompts the agent's recorded responses cover (values-local.yaml).
+        "Show all available products in the store.",
+        "What currencies are supported by the Astronomy Shop?",
+        "What current promotions are available on binoculars?",
     ]
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -47,7 +48,7 @@ data:
                 print("checkout status", resp.value.status, flush=True)
                 time.sleep(15)  # let the browser exporter flush the click and fetch spans
                 print("done:", page.url, flush=True)
-                # Then ask the shop's AI assistant (chatbot -> agent -> Claude ->
+                # Then ask the shop's AI assistant (chatbot -> agent -> recorded LLM ->
                 # shop services), in the same browser session, so RUM shows the
                 # shopping and the question together.
                 page.goto(BASE + "/chatbot/", wait_until="load")

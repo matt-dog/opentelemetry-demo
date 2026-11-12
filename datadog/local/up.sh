@@ -17,7 +17,6 @@ DEMO_CHART_VERSION=0.42.1
 DD_SITE="${DD_SITE:-datad0g.com}"
 DD_API_KEY_REF="${DD_API_KEY_REF:-op://Employee/ddot-lab/matt-dog-dd-api-key}"
 DD_APP_KEY_REF="${DD_APP_KEY_REF:-op://Employee/ddot-lab/matt-dog-dd-app-key}"
-ANTHROPIC_API_KEY_REF="${ANTHROPIC_API_KEY_REF:-op://Employee/ddot-lab/ANTHROPIC_API_KEY}"
 # The kube-stack installer, copied into kube-stack/ (see kube-stack/README.md).
 KUBE_STACK_DIR="${KUBE_STACK_DIR:-$HERE/kube-stack}"
 GCP_PROJECT="${GCP_PROJECT:-dd-dev-otelpmdev}"
@@ -58,7 +57,6 @@ esac
 # ---- keys: from the environment when set (CI, handover), else 1Password, read once --
 DD_API_KEY="${DD_API_KEY:-$(op read "$DD_API_KEY_REF")}"
 DD_APP_KEY="${DD_APP_KEY:-$(op read "$DD_APP_KEY_REF" 2>/dev/null || true)}"
-ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-$(op read "$ANTHROPIC_API_KEY_REF")}"
 
 # ---- the API key must belong to DD_SITE; a key from another site is dropped silently --
 res="$(curl -s "https://api.$DD_SITE/api/v1/validate" -H "DD-API-KEY: $DD_API_KEY")"
@@ -99,20 +97,25 @@ helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm
 helm repo update open-telemetry >/dev/null
 echo "Installing the Astronomy Shop (chart $DEMO_CHART_VERSION)"
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-# The load generator's locustfile, with shopping prompts for the agent.
+# The load generator's locustfile (values-local.yaml).
 kubectl -n "$NS" create configmap load-generator-locustfile \
   --from-file=locustfile.py="$HERE/load-generator/locustfile.py" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-# The shop's AI agent runs on Claude (values-local.yaml); its key, from 1Password.
-kubectl -n "$NS" create secret generic agent-llm \
-  --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
-  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# The agent's recorded LLM responses, with token usage (agent/add-usage.py). Over
+# 256 KB, so server-side apply (client-side apply's annotation would be too long).
+kubectl -n "$NS" create configmap agent-cassette \
+  --from-file=azure_gpt-5.5_cassette.yaml="$HERE/agent/azure_gpt-5.5_cassette.yaml" \
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f - >/dev/null
+# The agent's Anthropic key, from before it ran on recorded responses (2026-11-12).
+kubectl -n "$NS" delete secret agent-llm --ignore-not-found >/dev/null
 # --force-conflicts: the grant below edits the chart's postgresql-init configmap with
 # kubectl, so Helm's server-side apply finds another owner of init.sql and refuses the
 # upgrade. Helm takes the field back (the chart's init.sql), and the grant is re-added below.
 helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
   --version "$DEMO_CHART_VERSION" --namespace "$NS" --force-conflicts \
   --values "$HERE/values-local.yaml" >/dev/null
+# VCR reads the cassette at each call, but restart so a new one is in place at once.
+kubectl -n "$NS" rollout restart deploy/agent >/dev/null
 # productCatalogLockContention (3.1.0) takes LOCK TABLE catalog.products, which the chart's
 # init.sql does not allow (SELECT only: "permission denied for table products"). MAINTAIN
 # allows the lock without data writes (Postgres 17+). astronomy-db has no volume and runs

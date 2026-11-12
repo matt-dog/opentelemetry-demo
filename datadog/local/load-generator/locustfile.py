@@ -129,14 +129,9 @@ people = json.load(people_file)
 # (src/agent/fixtures/vcr_cassettes) have canned responses for, so
 # USE_VCR=True replays cleanly without a real LLM.
 agent_prompts = [
-    # datadog/local: shopping questions for the agent on Claude. Most of them
-    # make it call get_ads, so the ad service's scenarios reach the assistant.
-    "Are there any deals on telescopes right now?",
-    "What promotions are running on binoculars, and what would one cost in EUR?",
-    "I'm new to astronomy. Recommend a telescope under $200 and any accessory that pairs with it.",
-    "Which products are on promotion today?",
-    "What's a good gift for someone who already owns a telescope? Check the current deals.",
-    "Compare the two cheapest telescopes and tell me if either one is on sale.",
+    "Show all available products in the store.",
+    "What currencies are supported by the Astronomy Shop?",
+    "What current promotions are available on binoculars?",
 ]
 agent_endpoint = os.environ.get("AGENT_ENDPOINT", "agent")
 agent_port = os.environ.get("AGENT_PORT", "8010")
