@@ -31,6 +31,29 @@ into git or undone.
 
 ## Log
 
+### 2026-11-12 · The shopper runs the OpenTelemetry Browser SDK on every page
+- **What:** `local/otel-browser/` builds the OpenTelemetry Browser SDK (`@opentelemetry/browser-sdk`
+  0.8.0, `browser-instrumentation` 0.11.0, both experimental, released 2026-11-11) into one script,
+  `otel-browser.js` (committed; `build.sh` rebuilds it). `up.sh` makes the `otel-browser` ConfigMap,
+  and the shopper loads it into every shop page with Playwright's `add_init_script`, before the
+  page's own scripts. Only the event-based instrumentations run (navigation, navigation timing,
+  resource timing, user actions, Web Vitals, errors, console), with `setGlobals: false` and a
+  `session.id` on every record; the shop's own classic tracer keeps the fetch spans, so nothing is
+  recorded twice. Records go to the page's `/otlp-http/v1/logs` route, then the DDOT daemon
+  Collector, then Datadog Logs as `service:frontend-web`. Resource timing ignores the OTLP exports
+  and the Datadog RUM intake, which otherwise each record an event that is itself exported.
+  `SHOPPER_DATADOG_RUM` (in `shopper.yaml`, `on`) keeps the Datadog Browser SDK that frontend-proxy
+  injects; `off` blocks it in the shopper, so its sessions carry only OTel telemetry.
+- **Why:** the RUM OTel thread in Slack (2026-11-12): the demo should hold only OTel-collected
+  telemetry, and the browser SIG's SDK is the replacement for the Datadog Browser SDK. Done in the
+  shopper first, so nothing upstream changes and people browsing by hand still get the Datadog SDK.
+  Checked in matt-dog from 18:03Z: 3 sessions in about 3 minutes (one per round), about 150 records
+  each, 89% resource timing, plus Web Vitals (LCP, FCP, TTFB, CLS, INP), clicks with CSS selectors,
+  navigations and console.
+- **Known:** these are log records in Logs; whether RUM can show them as sessions is not known (asked
+  of the browser SIG side). The Collector's Kubernetes attributes tag them with the frontend-proxy pod
+  (`service.instance.id` too), since that is the connection they arrive on.
+
 ### 2026-11-12 · The agent's recorded responses keep their token usage on playback
 - **What:** `local/agent/patch_vcr.py`, the image's `src/agents/patch_vcr.py` with `"usage"` taken out
   of the keys `clean_response` drops, mounted over it from the `agent-patch-vcr` ConfigMap (`up.sh`).

@@ -1,6 +1,6 @@
 # A headless Chromium that shops like a person: home page, a product, Add To
 # Cart, Place Order, then a question to the shop's AI assistant (/chatbot/),
-# every 20 seconds. The shop's own browser instrumentation
+# every 20 seconds, with the OpenTelemetry Browser SDK on every page (otel-browser/). The shop's own browser instrumentation
 # (frontend-web) starts each trace at the click, so a checkout trace reads
 # browser -> frontend-proxy -> frontend -> checkout -> payment, with no load
 # generator span on top. See README.md.
@@ -11,7 +11,7 @@ metadata:
   namespace: otel-demo
 data:
   shop.py: |
-    import random, time
+    import os, random, time
     from playwright.sync_api import sync_playwright
 
     BASE = "http://frontend-proxy:8080"
@@ -21,6 +21,14 @@ data:
         "What currencies are supported by the Astronomy Shop?",
         "What current promotions are available on binoculars?",
     ]
+    # The OpenTelemetry Browser SDK (otel-browser/, built by its build.sh), loaded into every
+    # page before the page's own scripts: page loads, Web Vitals, clicks, errors and console as
+    # OTLP log records with a session.id, through the page's /otlp-http route.
+    OTEL_BROWSER = "/otel-browser/otel-browser.js"
+    # "off" blocks the Datadog Browser SDK that frontend-proxy injects, so these sessions carry
+    # only OTel telemetry; "on" keeps both, so RUM and Session Replay stay while the OTel
+    # events are compared with them.
+    DATADOG_RUM = os.environ.get("SHOPPER_DATADOG_RUM", "on") == "on"
     with sync_playwright() as p:
         browser = p.chromium.launch()
         while True:
@@ -29,6 +37,9 @@ data:
             # the address a person on their laptop uses; send it to the proxy.
             ctx.route("http://localhost:8080/otlp-http/**", lambda route: route.continue_(
                 url=route.request.url.replace("localhost:8080", "frontend-proxy:8080")))
+            ctx.add_init_script(path=OTEL_BROWSER)
+            if not DATADOG_RUM:
+                ctx.route("**/datadog-rum.js", lambda route: route.abort())
             page = ctx.new_page()
             try:
                 # The shop polls in the background, so "networkidle" never comes;
@@ -80,10 +91,16 @@ spec:
         - name: shopper
           image: mcr.microsoft.com/playwright/python:v1.47.0-jammy
           command: ["sh", "-c", "pip install -q playwright==1.47.0 && python /app/shop.py"]
-          volumeMounts: [{name: app, mountPath: /app}]
+          env:
+            - {name: SHOPPER_DATADOG_RUM, value: "on"}
+          volumeMounts:
+            - {name: app, mountPath: /app}
+            - {name: otel-browser, mountPath: /otel-browser}
           resources:
             requests: {cpu: 200m, memory: 512Mi}
             limits: {memory: 1Gi}
       volumes:
         - name: app
           configMap: {name: shopper}
+        - name: otel-browser
+          configMap: {name: otel-browser}

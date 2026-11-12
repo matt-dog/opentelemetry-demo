@@ -139,6 +139,10 @@ if [ "$(kubectl -n "$NS" exec deploy/astronomy-db -- psql -U postgres -d astrono
   kubectl -n "$NS" rollout restart deploy/astronomy-db >/dev/null
 fi
 
+# The OpenTelemetry Browser SDK bundle the shopper loads into the shop's pages (otel-browser/).
+kubectl -n "$NS" create configmap otel-browser \
+  --from-file=otel-browser.js="$HERE/otel-browser/otel-browser.js" \
+  --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f - >/dev/null
 kubectl apply -f "$HERE/shopper.yaml" >/dev/null
 # shop.py is read once at start, so restart for a changed ConfigMap.
 kubectl -n "$NS" rollout restart deploy/shopper >/dev/null

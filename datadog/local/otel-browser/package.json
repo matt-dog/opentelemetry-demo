@@ -1,0 +1,13 @@
+{
+  "name": "otel-browser-bundle",
+  "private": true,
+  "description": "The OpenTelemetry Browser SDK as one script the shopper loads into the shop's pages (see build.sh).",
+  "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/browser-instrumentation": "0.11.0",
+    "@opentelemetry/browser-sdk": "0.8.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}
