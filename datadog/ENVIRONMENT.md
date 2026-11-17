@@ -5,21 +5,24 @@ handed over. `local/README.md` covers what differs from the upstream demo and ho
 to run it; `CHANGES.md` is the dated history, including hand changes not yet in git.
 Keep this file current in the same commit as any change to the environment.
 
-As of 2026-10-25.
+As of 2026-11-17.
 
 ## Datadog org
 
 | | |
 |---|---|
-| Org | `matt-dog` (UUID `799a88c5-cdb1-11f1-a32b-a2e4bbf2e8d2`) |
-| Site | `datad0g.com`, UI at https://app.datad0g.com |
+| Org | `DDOT Minus Reinvent26` (UUID `123517f4-cc63-11f1-8f7d-920bb8d70cfd`) |
+| Site | `datadoghq.com`, UI at https://app.datadoghq.com |
 | Env tag | `otel-demo` (GKE), `otel-demo-local` (Rancher Desktop) |
-| API key | `op://Employee/ddot-lab/matt-dog-dd-api-key` |
-| Application key | `op://Employee/ddot-lab/matt-dog-dd-app-key` (no scopes; owner Matthew, Datadog Admin Role) |
+| API key | `op://Employee/ddot-lab/ddot-minus-api-key` |
+| Application key | `op://Employee/ddot-lab/ddot-minus-app-key` (owner Matthew, Datadog Admin Role) |
 
-Until 2026-10-22 the demo sent to the ddstaging org on datadoghq.com (env
-`otel-demo-gke-blog`). `up.sh` still goes there with `DD_SITE`, `DD_API_KEY_REF`
-and `DD_APP_KEY_REF` set.
+DDOT Minus Reinvent26 is a shared org (another env there: `reinvent-otel-26-ddot-minus`).
+Since 2026-11-17. From 2026-10-22 to 2026-11-17 the demo sent to Matthew's own org
+`matt-dog` on datad0g.com (since renamed; UUID `799a88c5-cdb1-11f1-a32b-a2e4bbf2e8d2`,
+keys `op://Employee/ddot-lab/matt-dog-dd-*`), and before that to the ddstaging org on
+datadoghq.com (env `otel-demo-gke-blog`). `up.sh` goes to any of them with `DD_SITE`,
+`DD_API_KEY_REF` and `DD_APP_KEY_REF` set. The matt-dog objects were left in place; its monitors are muted by downtime `0e2ce626-adac-4458-bc6d-7d4d02c6b536` (2026-11-17, no end).
 
 ### Objects in the org
 
@@ -28,22 +31,21 @@ Built from git by `local/dd-apply.py` (run by `up.sh`), matched by name, tagged
 
 | Object | Id | Status |
 |---|---|---|
-| RUM application `astronomy-shop (otel-demo)` | `8d3ef4e9-394d-4519-9cbe-aeee1a60d120` | created 2026-10-22 |
-| Monitor `[otel demo] ad service latency anomaly (otel-demo)` | 35241062 | created 2026-10-22; needs about a day of history before its baseline is trustworthy |
-| Monitor `[otel demo] ad service p95 latency high (otel-demo)` (per-minute p95 over 20 ms) | 35243022 | created 2026-10-22; Act 1's alert. Replaced the 50 ms monitor 35241065 (deleted), which stayed OK through the problem |
-| Workflow `[otel demo] remediate ad latency (otel-demo)`, handle `@workflow-otel-demo-remediate-ad` | `d0eecab0-b4b3-4d35-b717-2a43164e32a9` | 2026-10-23; started by the ad pod CPU monitor on every alert (since 2026-10-26; the latency monitor until then); declares an incident (SEV-3, services: ad) only if none is open (option B: never resolved, no seat), waits 6 min, rolls back adHighCpu (retrying 4 times) |
-| Workflow `[otel demo] resolve ad incident (otel-demo)`, handle `@workflow-otel-demo-resolve-ad-incident` | `41205ee4-70f2-4b21-9e3e-db102d7ccfac` | 2026-10-24; published but not mentioned by any monitor yet (off until an Incident Management seat exists) |
-| Incident Management | first incident #1 on 2026-10-23, declared by the workflow | resolving needs an Incident Management seat for the workflow's owner (403 "Seat Required" without one); creating does not |
-| HTTP connection `otel-demo remediator` (token auth) | `d9d26ff3-d299-47af-ac63-ffae3e0bd217` | 2026-10-23; holds the remediator token |
-| Monitor `[otel demo] ad service error rate (otel-demo)` (errors over hits above 5%, 10 min) | 35274708 | created 2026-10-23; service health next to the latency monitor |
-| Monitor `[otel demo] ad pod at its CPU limit (otel-demo)` (over 90% for 3 min, by `pod_name`) | 35333224 | created 2026-10-26; grouped by pod so it can sit on the pod in Kubernetes Explorer |
-| Monitor `[otel demo] product-catalog error rate (otel-demo)` (over 5%, 10 min) | 35333225 | created 2026-10-26; in Alert all the time by design (baseline productCatalogFailure), the always-open alert |
-| SLO `[otel demo] ad GetAds p95 under 20 ms (otel-demo)` (time slice, 99% of minutes, 7d) | `4e556ecc37d6557babf1732d1062f771` | created 2026-10-23; 90.3% over its first 24h, because the hourly flag windows burn about 15 minutes an hour |
-| SLO `[otel demo] ad availability (otel-demo)` (metric, 99.9%, 7d) | `593a4450738b5b529773be51cf267fce` | created 2026-10-23; 100% (no ad errors) |
-| Dashboard `[otel demo] the :30 to :45 window (otel-demo)` | `knb-9zr-fkt` | created 2026-10-25; one widget per chapter of the presenter script, change events overlaid; linked from the Doc's Setup table |
-| Dashboard `[otel demo] ad CPU: profiler vs container (otel-demo)` | `rah-xv8-j2k` | created 2026-10-28; evidence for the Host Profiler's CPU undercount (container CPU in ms per minute beside the profiler's flame graph) |
-| APM retention filter `otel demo: every span (otel-demo)` | `env:otel-demo` at 100% | created 2026-10-22, so the demo's traces stay searchable after Live Search's 15 minutes |
-| Log index for the env | none | creation refused (403) even with an unscoped key; not needed here, since `main` has no exclusion filter in this org |
+| RUM application `astronomy-shop (otel-demo)` | `ff1ba9cb-c19e-4918-a201-5caa40b12423` | created 2026-11-17 |
+| Monitor `[otel demo] ad service latency anomaly (otel-demo)` | 346227643 | created 2026-11-17; needs about a day of history before its baseline is trustworthy |
+| Monitor `[otel demo] ad service p95 latency high (otel-demo)` (per-minute p95 over 20 ms) | 346227650 | created 2026-11-17; Act 1's alert |
+| Monitor `[otel demo] ad service error rate (otel-demo)` (errors over hits above 5%, 10 min) | 346227635 | created 2026-11-17 |
+| Monitor `[otel demo] ad pod at its CPU limit (otel-demo)` (over 90% for 3 min, by `pod_name`) | 346227652 | created 2026-11-17; starts the remediate workflow |
+| Monitor `[otel demo] product-catalog error rate (otel-demo)` (over 5%, 10 min) | 346227657 | created 2026-11-17; in Alert all the time by design (baseline productCatalogFailure) |
+| Workflow `[otel demo] remediate ad latency (otel-demo)`, handle `@workflow-otel-demo-remediate-ad` | `a0e164c5-23db-4318-9f6c-991b07d45d1a` | created 2026-11-17 by `up.sh gke`; started by the ad pod CPU monitor; declares an incident (SEV-3, services: ad) only if none is open, waits 6 min, rolls back adHighCpu |
+| HTTP connection `otel-demo remediator` (token auth) | created 2026-11-17 by `up.sh gke` | holds the remediator token |
+| Workflow `[otel demo] resolve ad incident (otel-demo)`, handle `@workflow-otel-demo-resolve-ad-incident` | `7147c6e8-249c-4e40-9f09-0543ee9abc3d` | created 2026-11-17; not mentioned by any monitor |
+| SLO `[otel demo] ad GetAds p95 under 20 ms (otel-demo)` | `b89fc7f6e91b543286617f3645818d73` | created 2026-11-17 |
+| SLO `[otel demo] ad availability (otel-demo)` | `9b75c4bbef805a498df4a707279136bb` | created 2026-11-17 |
+| Dashboard `[otel demo] the :30 to :45 window (otel-demo)` | `zcp-ds9-yyx` | created 2026-11-17; the Doc's Setup table still links the matt-dog one |
+| Dashboard `[otel demo] ad CPU: profiler vs container (otel-demo)` | `6xe-m9q-5yg` | created 2026-11-17 |
+| APM retention filter `otel demo: every span (otel-demo)` | `env:otel-demo` at 100% | created 2026-11-17 |
+| Log index for the env | none | creation refused (403); not needed, since `main` has no exclusion filter in this org |
 
 ### Presenter script
 
@@ -56,8 +58,8 @@ in `CHANGES.md` when it is turned on.
 
 | Setting | Where | Status |
 |---|---|---|
-| OTel Semantic Query Mode | Organization Settings, Preferences | on since 2026-10-22 (Matthew) |
-| `graphing_semantic_metric_names` (metrics features for OTel names) | Mosaic feature flag for the org | on since 2026-10-23 (Matthew) |
+| OTel Semantic Query Mode | Organization Settings, Preferences | not checked in DDOT Minus Reinvent26 (was on in matt-dog since 2026-10-22) |
+| `graphing_semantic_metric_names` (metrics features for OTel names) | Mosaic feature flag for the org | not checked in DDOT Minus Reinvent26 (was on in matt-dog since 2026-10-23) |
 
 ## Kubernetes
 

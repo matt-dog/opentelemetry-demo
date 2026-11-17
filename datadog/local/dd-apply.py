@@ -11,8 +11,8 @@ Every file is a template: ${ENV_NAME} is filled in, so the same definitions serv
 any env. Monitors are matched by name and created or updated in place, tagged
 managed_by:otel-demo-local. The log index is created or updated, then moved ahead
 of "main" (in the ddstaging org, its "Reduce volume" exclusion drops 99.99% of
-what falls through to it). DD_SITE is the site (default datad0g.com, where the
-matt-dog org is homed). up.sh runs this; it exits 0 with a warning when the
+what falls through to it). DD_SITE is the site (default datadoghq.com, where the
+DDOT Minus Reinvent26 org is homed). up.sh runs this; it exits 0 with a warning when the
 application key is missing or refused, since the demo itself works without it.
 """
 import json
@@ -25,7 +25,7 @@ import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent / "datadog"
-API = f"https://api.{os.environ.get('DD_SITE', 'datad0g.com')}"
+API = f"https://api.{os.environ.get('DD_SITE', 'datadoghq.com')}"
 TAG = "managed_by:otel-demo-local"
 
 

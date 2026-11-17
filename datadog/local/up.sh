@@ -13,10 +13,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 TARGET="${1:-local}"
 NS=otel-demo
 DEMO_CHART_VERSION=0.42.1
-# The matt-dog org on datad0g.com. Set DD_SITE and the two refs to send elsewhere.
-DD_SITE="${DD_SITE:-datad0g.com}"
-DD_API_KEY_REF="${DD_API_KEY_REF:-op://Employee/ddot-lab/matt-dog-dd-api-key}"
-DD_APP_KEY_REF="${DD_APP_KEY_REF:-op://Employee/ddot-lab/matt-dog-dd-app-key}"
+# The DDOT Minus Reinvent26 org on datadoghq.com (since 2026-11-17; matt-dog on
+# datad0g.com before). Set DD_SITE and the two refs to send elsewhere.
+DD_SITE="${DD_SITE:-datadoghq.com}"
+DD_API_KEY_REF="${DD_API_KEY_REF:-op://Employee/ddot-lab/ddot-minus-api-key}"
+DD_APP_KEY_REF="${DD_APP_KEY_REF:-op://Employee/ddot-lab/ddot-minus-app-key}"
 # The kube-stack installer, copied into kube-stack/ (see kube-stack/README.md).
 KUBE_STACK_DIR="${KUBE_STACK_DIR:-$HERE/kube-stack}"
 GCP_PROJECT="${GCP_PROJECT:-dd-dev-otelpmdev}"
@@ -72,6 +73,12 @@ DD_API_KEY="$DD_API_KEY" DD_SITE="$DD_SITE" \
   K8S_CLUSTER_NAME="$ENV_NAME" K8S_CLUSTER_TYPE="$CLUSTER_TYPE" \
   DEPLOYMENT_ENVIRONMENT_NAME="$ENV_NAME" \
   "$KUBE_STACK_DIR/install" "$kube_stack_values" >/dev/null
+# The collectors read DD_SITE and the key from datadog-secret only at start; restart them
+# so a changed org or key takes effect (the operator is left alone, for its pod webhook).
+for c in daemonset/opentelemetry-kube-stack-daemon-collector deploy/opentelemetry-kube-stack-cluster-collector \
+         daemonset/opentelemetry-kube-stack-host-profiler-collector; do
+  kubectl -n opentelemetry-operator-system rollout restart "$c" >/dev/null 2>&1 || true
+done
 
 # ---- Datadog objects from git (datadog/, applied by dd-apply.py) -----------------
 # Monitors, the log index and the RUM application. Runs before the shop so the
@@ -155,6 +162,11 @@ kubectl apply -f "$HERE/scenarios.yaml" >/dev/null
 # The upstream contrib Collector for the integration dashboards (PostgreSQL, Redis,
 # Kafka), beside the DDOT ones; it reads the scenarios-dd key and scenarios-env site.
 sed "s/__ENV_NAME__/$ENV_NAME/g" "$HERE/contrib-collector.yaml" | kubectl apply -f - >/dev/null
+# These read the site, key or RUM ids from a secret or configmap only at start, so a
+# changed org or key reaches them only on a restart.
+for d in scenarios frontend-proxy contrib-collector; do
+  kubectl -n "$NS" rollout restart "deploy/$d" >/dev/null || echo "could not restart $d" >&2
+done
 
 echo "Waiting for every pod to be Ready (up to 10 minutes)"
 kubectl -n "$NS" wait --for=condition=Ready pods --all --timeout=600s >/dev/null \
@@ -179,16 +191,27 @@ if [ "$TARGET" = gke ]; then
   ranges="$(curl -s "https://ip-ranges.$DD_SITE/" | python3 -c "import json,sys; print(','.join(json.load(sys.stdin)['webhooks']['prefixes_ipv4']))")"
   gca security-policies describe otel-demo-remediator >/dev/null 2>&1 \
     || gca security-policies create otel-demo-remediator --description "otel-demo remediator: Datadog webhooks IP ranges only" >/dev/null
-  if gca security-policies rules describe 1000 --security-policy otel-demo-remediator >/dev/null 2>&1; then
-    gca security-policies rules update 1000 --security-policy otel-demo-remediator --src-ip-ranges "$ranges" --action allow >/dev/null
-  else
-    gca security-policies rules create 1000 --security-policy otel-demo-remediator --src-ip-ranges "$ranges" --action allow >/dev/null
-  fi
+  # A Cloud Armor rule takes at most 10 ranges (datadoghq.com has 38), so one allow rule per
+  # 10, from priority 1000 up; rules left over from a site with more ranges are deleted.
+  prio=1000
+  for chunk in $(echo "$ranges" | tr ',' '\n' | paste -sd ',,,,,,,,,\n' -); do
+    if gca security-policies rules describe "$prio" --security-policy otel-demo-remediator >/dev/null 2>&1; then
+      gca security-policies rules update "$prio" --security-policy otel-demo-remediator --src-ip-ranges "$chunk" --action allow >/dev/null
+    else
+      gca security-policies rules create "$prio" --security-policy otel-demo-remediator --src-ip-ranges "$chunk" --action allow >/dev/null
+    fi
+    prio=$((prio + 1))
+  done
+  while gca security-policies rules describe "$prio" --security-policy otel-demo-remediator >/dev/null 2>&1; do
+    gca security-policies rules delete "$prio" --security-policy otel-demo-remediator >/dev/null
+    prio=$((prio + 1))
+  done
   gca security-policies rules update 2147483647 --security-policy otel-demo-remediator --action deny-403 >/dev/null
   kubectl -n "$NS" get secret remediator-token >/dev/null 2>&1 \
     || kubectl -n "$NS" create secret generic remediator-token \
          --from-literal=token="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >/dev/null
   sed "s/__HOST__/$rem_host/g" "$HERE/remediator.yaml" | kubectl apply -f - >/dev/null
+  kubectl -n "$NS" rollout restart deploy/remediator >/dev/null   # DD_SITE and DD_API_KEY are read at start
   echo "Remediator at https://$rem_host (Datadog webhooks ranges only); applying its connection and workflow"
   DD_API_KEY="$DD_API_KEY" DD_APP_KEY="$DD_APP_KEY" DD_SITE="$DD_SITE" ENV_NAME="$ENV_NAME" \
     REMEDIATOR_URL="https://$rem_host" \

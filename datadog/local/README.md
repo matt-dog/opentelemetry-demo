@@ -84,7 +84,7 @@ Delete the GKE cluster when done:
 - `datadog/`: monitor and log index definitions, templated on `${ENV_NAME}`.
 - `dd-apply.py`: creates or updates them (monitors matched by name, tagged
   `managed_by:otel-demo-local`). Needs `DD_APP_KEY` (`DD_APP_KEY_REF`, default
-  `op://Employee/ddot-lab/matt-dog-dd-app-key`) with write access; each object
+  `op://Employee/ddot-lab/ddot-minus-app-key`) with write access; each object
   that is refused is skipped with a warning.
 - `kube-stack/`: the kube-stack installer, copied from opentelemetry-examples
   (where from, and why, in its README).
@@ -119,4 +119,4 @@ Delete the GKE cluster when done:
   records no exception type or stack, so Datadog shows "Missing error message".
 - ddstaging logs (handled by `datadog/log-index.json`): app logs fall through to the `main` index, whose "Reduce
   volume" exclusion drops 99.99%, so they don't link to traces until an index
-  ahead of `main` matches this env. The matt-dog org has no such exclusion.
+  ahead of `main` matches this env. The DDOT Minus Reinvent26 org has no such exclusion.

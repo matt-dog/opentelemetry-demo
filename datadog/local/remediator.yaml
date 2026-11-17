@@ -49,7 +49,7 @@ data:
     SA = "/var/run/secrets/kubernetes.io/serviceaccount"
     DEPLOY = f"/apis/apps/v1/namespaces/{NS}/deployments/"
     FLAGD = "http://flagd:4000/api"
-    EVENTS = f"https://event-management-intake.{os.environ.get('DD_SITE', 'datad0g.com')}/api/v2/events"
+    EVENTS = f"https://event-management-intake.{os.environ.get('DD_SITE', 'datadoghq.com')}/api/v2/events"
 
     def k8s(method, path, body=None, ctype="application/json"):
         req = urllib.request.Request(K8S + path, method=method,

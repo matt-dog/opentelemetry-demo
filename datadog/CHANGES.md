@@ -22,6 +22,8 @@ into git or undone.
 
 | Date | Where | Change | Why | Status |
 |---|---|---|---|---|
+| 2026-11-17 | matt-dog org, Downtimes | Downtime `0e2ce626-adac-4458-bc6d-7d4d02c6b536` mutes every `managed_by:otel-demo-local` monitor, no end | the demo moved to DDOT Minus Reinvent26; its monitors there would only go to No Data | active; cancel it if the demo goes back |
+| 2026-11-17 | DDOT Minus Reinvent26 org settings | OTel Semantic Query Mode and `graphing_semantic_metric_names` not checked yet | they were on in matt-dog | check in the UI and Mosaic |
 | 2026-10-25 | astronomy-db (`kubectl exec`), configmap `postgresql-init` | `GRANT MAINTAIN ON catalog.products TO astronomy_user`, live and appended to init.sql | productCatalogLockContention needs it (entry 2026-10-25) | same as what `up.sh` now does; any helm upgrade outside `up.sh` reverts the configmap |
 | 2026-10-25 | flagd-ui flag set | `adHighCpu` carries a `metadata.rollback` timestamp; scheduled flags carry `metadata.nudge` | written by the remediator on every rollback and by the scheduler a minute after each change (and once by hand in a test) | expected; metadata does not affect evaluation |
 | 2026-10-23 | matt-dog Incident Management | Incident #1 declared by the workflow test, still active | Resolve step refused: no Incident Management seat | Resolve by hand, or rerun once a seat is assigned |
@@ -30,6 +32,25 @@ into git or undone.
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-11-17 · The demo sends to DDOT Minus Reinvent26 on datadoghq.com
+- **What:** `up.sh` defaults to `DD_SITE=datadoghq.com` and the keys
+  `op://Employee/ddot-lab/ddot-minus-api-key` and `ddot-minus-app-key`; `dd-apply.py` and the
+  remediator default to the same site. `dd-apply.py` built the monitors, SLOs, dashboards, RUM
+  application, retention filter and resolve workflow there (ids in `ENVIRONMENT.md`); `up.sh gke`
+  adds the remediator connection and the remediate workflow. Nothing is sent to matt-dog after the
+  run; its objects were left in place. `up.sh` now restarts `scenarios`, `frontend-proxy`, the
+  contrib collector and the remediator, which read the site, key or RUM ids only at start, and
+  the three DDOT collectors, which read `datadog-secret` only at start. Cloud Armor gets one allow
+  rule per 10 webhook ranges (priorities 1000 up): datadoghq.com has 38, and a rule takes 10, so
+  the single rule 1000 failed on the first run.
+- **Checked:** 2026-11-17, `up.sh gke` finished 18:22Z. Since 18:21Z matt-dog has 0 `env:otel-demo`
+  spans (89,570 from 18:00 to 18:15) and no logs; its last `k8s.container.cpu_limit` point is
+  18:20:16Z. DDOT Minus has spans from 20 services, logs and the k8s metrics. `env:otel-demo` was not
+  in use there before (its other envs: `reinvent-otel-26-ddot-minus`, `sandbox`). The remediate
+  workflow has not yet run end to end in the new org.
+- **Why:** Matthew moved the Re:Invent demo scenarios to the shared DDOT Minus environment, which is
+  already set up with feature flags, so the demo no longer depends on his own org.
 
 ### 2026-11-12 · The shopper runs the OpenTelemetry Browser SDK on every page
 - **What:** `local/otel-browser/` builds the OpenTelemetry Browser SDK (`@opentelemetry/browser-sdk`
