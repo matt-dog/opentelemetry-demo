@@ -60,6 +60,7 @@ in `CHANGES.md` when it is turned on.
 |---|---|---|
 | OTel Semantic Query Mode | Organization Settings, Preferences | not checked in DDOT Minus Reinvent26 (was on in matt-dog since 2026-10-22) |
 | `graphing_semantic_metric_names` (metrics features for OTel names) | Mosaic feature flag for the org | not checked in DDOT Minus Reinvent26 (was on in matt-dog since 2026-10-23) |
+| `rum_otel_q4_25` (RUM UI for OTel browser data) | Mosaic feature flag, targeting rule v9 (Bill Meyer, approved by Pablo) | on in DDOT Minus Reinvent26 since 2026-11-18 17:01Z, per Slack; not checked in Mosaic |
 
 ## Kubernetes
 

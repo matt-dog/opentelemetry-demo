@@ -29,9 +29,14 @@ import { WebVitalsInstrumentation } from '@opentelemetry/browser-instrumentation
     inactivityTimeout: 30 * 60,
   });
   await sessionManager.start();
+  // The RUM application id (the shopper sets it from the rum-config secret). With it, Datadog
+  // builds RUM sessions from these records, and the DDOT daemon's logs/rum pipeline sends them
+  // to Datadog's OTLP intake instead of the Datadog exporter.
+  const rumApplicationId = window.__otelRumApplicationId;
   window.__otelBrowser = startBrowserSdk({
     serviceName: 'frontend-web',
     serviceVersion: '3.1.0',
+    resourceAttributes: rumApplicationId ? { 'datadog.application.id': rumApplicationId } : {},
     // The shop's own tracer owns the global providers and context manager.
     setGlobals: false,
     logs: {

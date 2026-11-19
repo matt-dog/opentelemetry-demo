@@ -22,6 +22,7 @@ into git or undone.
 
 | Date | Where | Change | Why | Status |
 |---|---|---|---|---|
+| 2026-11-18 | DDOT Minus Reinvent26 org, Mosaic | `rum_otel_q4_25` on (rule v9, Bill Meyer, approved by Pablo) | RUM UI for OTel browser data; the backend routing and mapper are GA | on per Slack 17:01Z; internal flag, set outside git |
 | 2026-11-17 | matt-dog org, Downtimes | Downtime `0e2ce626-adac-4458-bc6d-7d4d02c6b536` mutes every `managed_by:otel-demo-local` monitor, no end | the demo moved to DDOT Minus Reinvent26; its monitors there would only go to No Data | active; cancel it if the demo goes back |
 | 2026-11-17 | DDOT Minus Reinvent26 org settings | OTel Semantic Query Mode and `graphing_semantic_metric_names` not checked yet | they were on in matt-dog | check in the UI and Mosaic |
 | 2026-10-25 | astronomy-db (`kubectl exec`), configmap `postgresql-init` | `GRANT MAINTAIN ON catalog.products TO astronomy_user`, live and appended to init.sql | productCatalogLockContention needs it (entry 2026-10-25) | same as what `up.sh` now does; any helm upgrade outside `up.sh` reverts the configmap |
@@ -32,6 +33,35 @@ into git or undone.
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-11-18 · The OTel browser records go to RUM through a DDOT pipeline of their own
+- **What:** `otel-browser/entry.js` sets the resource attribute `datadog.application.id` to the RUM
+  application id, which the shopper takes from the `rum-config` secret (`DD_RUM_APPLICATION_ID`) and
+  hands to the page with an init script before `otel-browser.js`; `otel-browser.js` rebuilt. In the
+  DDOT daemon Collector (`kube-stack-values.yaml`), `filter/not_rum` drops records with that
+  attribute from the `logs` pipeline, and a new `logs/rum` pipeline (`otlp` receiver,
+  `filter/rum_only`, `resource/rum` for the env) exports only those records with `otlp_http/rum`
+  to Datadog's OTLP intake, `https://otlp.$DD_SITE`. All other logs keep the Datadog exporter.
+- **Why:** the RUM OTel thread in Slack (2026-11-18): Maxime's diagnosis was that the records
+  were probably missing `datadog.application.id` and the session manager; he said the routing and mapper
+  are GA, and only the UI flag `rum_otel_q4_25` is needed; Pablo turned it on for DDOT Minus
+  Reinvent26 (org 2097806) at 17:01Z. Before this, the records went through the Datadog exporter
+  to Logs only, and RUM's 58,109 events from the hour before were all from the Datadog Browser SDK
+  (`_dd.sdk_name: rum`). The routing is taken to happen at the OTLP intake (inferred from the old
+  flag name `enable-otlp-intake-rum-routing`), hence the separate exporter. `SHOPPER_DATADOG_RUM`
+  stays `on` for now, so OTel and Datadog SDK sessions can be compared side by side.
+- **Checked:** 2026-11-18, daemon rolled out 17:36Z (3 pods, `filter` processor loaded), shopper
+  restarted after. In the next 10 minutes RUM application `ff1ba9cb` had 5 OTel sessions (32-hex
+  ids such as `9f234100…`, `otel.library.name` `@opentelemetry/browser-instrumentation/*`) with
+  views, actions, resources, vitals and an error, next to the Datadog SDK's sessions (UUID ids).
+  Logs had no `service:frontend-web` records in the 3 minutes before 17:41Z. The exporter's own
+  counters were not read (no curl or wget in the collector image).
+- **Watch:** the OTel sessions share the RUM application with the Datadog SDK's, so RUM monitors
+  built by `dd-apply.py` (for example image loads over 3 s) now count both.
+- **Also:** the 2026-11-12 entry's "people browsing by hand" is wrong: the demo is headless, and
+  the shopper is its only browser.
+- **Not yet:** browser spans. The shop's own tracer still owns fetch spans and carries no
+  `datadog.application.id`, so they stay on the traces pipeline (APM, Jaeger).
 
 ### 2026-11-17 · The demo sends to DDOT Minus Reinvent26 on datadoghq.com
 - **What:** `up.sh` defaults to `DD_SITE=datadoghq.com` and the keys

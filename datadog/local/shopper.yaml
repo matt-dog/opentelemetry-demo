@@ -11,7 +11,7 @@ metadata:
   namespace: otel-demo
 data:
   shop.py: |
-    import os, random, time
+    import json, os, random, time
     from playwright.sync_api import sync_playwright
 
     BASE = "http://frontend-proxy:8080"
@@ -29,6 +29,9 @@ data:
     # only OTel telemetry; "on" keeps both, so RUM and Session Replay stay while the OTel
     # events are compared with them.
     DATADOG_RUM = os.environ.get("SHOPPER_DATADOG_RUM", "on") == "on"
+    # The RUM application (rum-config secret). The OTel SDK puts it on its records as
+    # datadog.application.id, which is what makes Datadog build RUM sessions from them.
+    RUM_APPLICATION_ID = os.environ.get("DD_RUM_APPLICATION_ID", "")
     with sync_playwright() as p:
         browser = p.chromium.launch()
         while True:
@@ -37,6 +40,8 @@ data:
             # the address a person on their laptop uses; send it to the proxy.
             ctx.route("http://localhost:8080/otlp-http/**", lambda route: route.continue_(
                 url=route.request.url.replace("localhost:8080", "frontend-proxy:8080")))
+            if RUM_APPLICATION_ID:
+                ctx.add_init_script(script="window.__otelRumApplicationId = %s;" % json.dumps(RUM_APPLICATION_ID))
             ctx.add_init_script(path=OTEL_BROWSER)
             if not DATADOG_RUM:
                 ctx.route("**/datadog-rum.js", lambda route: route.abort())
@@ -93,6 +98,8 @@ spec:
           command: ["sh", "-c", "pip install -q playwright==1.47.0 && python /app/shop.py"]
           env:
             - {name: SHOPPER_DATADOG_RUM, value: "on"}
+            - name: DD_RUM_APPLICATION_ID
+              valueFrom: {secretKeyRef: {name: rum-config, key: DD_RUM_APPLICATION_ID, optional: true}}
           volumeMounts:
             - {name: app, mountPath: /app}
             - {name: otel-browser, mountPath: /otel-browser}

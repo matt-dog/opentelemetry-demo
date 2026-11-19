@@ -46,6 +46,20 @@ collectors:
         # with helm --reuse-values the null survives and the collector rejects an
         # empty processor. Defining it (unused by any pipeline) keeps the config valid.
         resource/hostname: *dd_hostname
+        # Browser RUM: the OTel Browser SDK's records carry datadog.application.id. They leave
+        # the logs pipeline (Datadog exporter, Logs) and take logs/rum (Datadog's OTLP intake),
+        # where Datadog routes them to RUM. Everything else is unchanged.
+        filter/not_rum:
+          logs:
+            log_record:
+              - 'resource.attributes["datadog.application.id"] != nil'
+        filter/rum_only:
+          logs:
+            log_record:
+              - 'resource.attributes["datadog.application.id"] == nil'
+        resource/rum:
+          attributes:
+            - {key: deployment.environment.name, value: __ENV_NAME__, action: upsert}
       receivers:
         otlp:
           protocols:
@@ -70,6 +84,11 @@ collectors:
           endpoint: http://prometheus.otel-demo.svc.cluster.local:9090/api/v1/otlp
           tls:
             insecure: true
+        # Datadog's OTLP intake (https://docs.datadoghq.com/opentelemetry/setup/otlp_ingest/logs/).
+        otlp_http/rum:
+          endpoint: https://otlp.${env:DD_SITE:-datadoghq.com}
+          headers:
+            dd-api-key: ${env:DD_API_KEY}
       service:
         pipelines:
           # Every trace, before the Datadog sampling pipeline.
@@ -77,7 +96,11 @@ collectors:
             processors: [resource_detection/env, resource/dd_hostname]
             exporters: [datadog/connector, otlp_grpc/jaeger, span_metrics]
           logs:
-            processors: [resource_detection/env, resource/dd_hostname]
+            processors: [resource_detection/env, resource/dd_hostname, filter/not_rum]
+          logs/rum:
+            receivers: [otlp]
+            processors: [filter/rum_only, resource/rum]
+            exporters: [otlp_http/rum]
           metrics:
             processors: [resource_detection/env, cumulative_to_delta, delta_to_rate, resource/dd_hostname]
           metrics/cadvisor:
