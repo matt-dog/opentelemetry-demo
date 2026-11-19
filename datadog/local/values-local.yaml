@@ -32,6 +32,19 @@ components:
         existingConfigMap: load-generator-locustfile
         mountPath: /usr/src/app/locustfile.py
         subPath: locustfile.py
+  frontend:
+    # For a frontend built from open-telemetry/opentelemetry-demo#4329 (the OpenTelemetry
+    # Browser SDK in place of the shop's old browser tracer; FRONTEND_IMAGE in up.sh). The
+    # upstream 3.1.0 image ignores these. Logs take the same /otlp-http route as traces, and
+    # datadog.application.id makes Datadog build RUM sessions from the browser's telemetry.
+    envOverrides:
+      - name: PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+        value: http://localhost:8080/otlp-http/v1/logs
+      - name: DD_RUM_APPLICATION_ID
+        valueFrom:
+          secretKeyRef: {name: rum-config, key: DD_RUM_APPLICATION_ID, optional: true}
+      - name: PUBLIC_OTEL_RESOURCE_ATTRIBUTES
+        value: datadog.application.id=$(DD_RUM_APPLICATION_ID)
   frontend-proxy:
     # The image's Envoy template plus a Lua filter that adds the Datadog RUM
     # Browser SDK to the shop's and the chatbot's pages
@@ -43,6 +56,11 @@ components:
         mountPath: /home/envoy/envoy.tmpl.yaml
         subPath: envoy.tmpl.yaml
     envOverrides:
+      # "on" inserts the Datadog Browser SDK into every page (shopper and load generator
+      # browsers alike). "off": pages carry only the OpenTelemetry Browser SDK of the
+      # FRONTEND_IMAGE frontend, whose traceparent then reaches the backend.
+      - name: DD_RUM_INJECT
+        value: "off"
       - name: DD_RUM_APPLICATION_ID
         valueFrom:
           secretKeyRef: {name: rum-config, key: DD_RUM_APPLICATION_ID}

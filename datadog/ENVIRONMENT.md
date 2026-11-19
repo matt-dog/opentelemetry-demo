@@ -87,8 +87,11 @@ were deleted that day.
 | Upstream demo Helm chart | `open-telemetry/opentelemetry-demo` 0.42.1 | none |
 | kube-stack installer (OTel Operator + DDOT collectors) | copied into `local/kube-stack/` from `DataDog/opentelemetry-examples` (abandoned local branch `matthew-david/blog-jaeger-datadog`, 4e131eb) | none; the copy is in this repo |
 | Collector image | the one the kube-stack ddot flow pins (a DDOT dev build) | not a released DDOT Collector |
+| Frontend image | `src/frontend` from the draft PR open-telemetry/opentelemetry-demo#4329, built here and pushed to Artifact Registry `us-east1-docker.pkg.dev/dd-dev-otelpmdev/otel-demo/frontend` (repo created 2026-11-19; the nodes' default compute service account has `artifactregistry.reader` on it) | the PR is a draft; rebuild when it changes or merges, and drop `FRONTEND_IMAGE` once a released demo image has it |
 
 ## Tools on the machine that runs it
 
 `op` (signed in), `gcloud` (signed in to `dd-dev-otelpmdev`), `kubectl`, `helm`,
-`python3`, `curl`.
+`python3`, `curl`. The frontend image is built by `local/frontend-build.sh` with Cloud Build in
+`dd-dev-otelpmdev` (native `linux/amd64`, `rsync` needed locally); a local build under amd64
+emulation (Rancher Desktop, Apple silicon) segfaults in `next build`.

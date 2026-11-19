@@ -1,7 +1,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-FROM docker.io/library/node:25.9.0-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS builder
+FROM docker.io/library/node:26.12.1-slim@sha256:94816674c62774da0d099a947bf4613b9e1972a2733abd0d0cd80e795f8411d0 AS builder
 
 WORKDIR /app
 
@@ -20,18 +20,21 @@ COPY ./src/frontend/styles/ styles/
 COPY ./src/frontend/types/ types/
 
 COPY ./src/frontend/utils/enums/ utils/enums/
+COPY ./src/frontend/utils/hooks/ utils/hooks/
 COPY ./src/frontend/utils/telemetry/ utils/telemetry/
 COPY ./src/frontend/utils/imageLoader.js utils/imageLoader.js
 COPY ./src/frontend/utils/Request.ts utils/Request.ts
 
 COPY ./src/frontend/next.config.js next.config.js
 COPY ./src/frontend/tsconfig.json tsconfig.json
+COPY ./src/frontend/eslint.config.mjs eslint.config.mjs
 
+RUN npm run lint
 RUN npm run build
 
 # -----------------------------------------------------------------------------
 
-FROM docker.io/library/node:25.9.0-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS deps
+FROM docker.io/library/node:26.12.1-slim@sha256:94816674c62774da0d099a947bf4613b9e1972a2733abd0d0cd80e795f8411d0 AS deps
 
 WORKDIR /app
 
@@ -42,7 +45,7 @@ RUN npm ci --omit=dev
 
 # -----------------------------------------------------------------------------
 
-FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:6abfcb367ebc291572c774c1592a986be2ab26a2486f73093401327495a5962a
 
 WORKDIR /app
 

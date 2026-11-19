@@ -32,6 +32,10 @@ data:
     # The RUM application (rum-config secret). The OTel SDK puts it on its records as
     # datadog.application.id, which is what makes Datadog build RUM sessions from them.
     RUM_APPLICATION_ID = os.environ.get("DD_RUM_APPLICATION_ID", "")
+    # "off" when the frontend loads the OpenTelemetry Browser SDK itself (FRONTEND_IMAGE in
+    # up.sh, built from open-telemetry/opentelemetry-demo#4329); injecting it too would record
+    # every event twice.
+    OTEL_BROWSER_INJECT = os.environ.get("SHOPPER_OTEL_BROWSER", "on") == "on"
     with sync_playwright() as p:
         browser = p.chromium.launch()
         while True:
@@ -40,9 +44,10 @@ data:
             # the address a person on their laptop uses; send it to the proxy.
             ctx.route("http://localhost:8080/otlp-http/**", lambda route: route.continue_(
                 url=route.request.url.replace("localhost:8080", "frontend-proxy:8080")))
-            if RUM_APPLICATION_ID:
-                ctx.add_init_script(script="window.__otelRumApplicationId = %s;" % json.dumps(RUM_APPLICATION_ID))
-            ctx.add_init_script(path=OTEL_BROWSER)
+            if OTEL_BROWSER_INJECT:
+                if RUM_APPLICATION_ID:
+                    ctx.add_init_script(script="window.__otelRumApplicationId = %s;" % json.dumps(RUM_APPLICATION_ID))
+                ctx.add_init_script(path=OTEL_BROWSER)
             if not DATADOG_RUM:
                 ctx.route("**/datadog-rum.js", lambda route: route.abort())
             page = ctx.new_page()
@@ -97,7 +102,10 @@ spec:
           image: mcr.microsoft.com/playwright/python:v1.47.0-jammy
           command: ["sh", "-c", "pip install -q playwright==1.47.0 && python /app/shop.py"]
           env:
-            - {name: SHOPPER_DATADOG_RUM, value: "on"}
+            # Both off with the Browser SDK frontend (FRONTEND_IMAGE): the page instruments
+            # itself, and without the Datadog SDK its traceparent no longer overrides the OTel one.
+            - {name: SHOPPER_DATADOG_RUM, value: "off"}
+            - {name: SHOPPER_OTEL_BROWSER, value: "off"}
             - name: DD_RUM_APPLICATION_ID
               valueFrom: {secretKeyRef: {name: rum-config, key: DD_RUM_APPLICATION_ID, optional: true}}
           volumeMounts:

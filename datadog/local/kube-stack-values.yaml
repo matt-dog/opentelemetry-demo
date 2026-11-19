@@ -46,16 +46,22 @@ collectors:
         # with helm --reuse-values the null survives and the collector rejects an
         # empty processor. Defining it (unused by any pipeline) keeps the config valid.
         resource/hostname: *dd_hostname
-        # Browser RUM: the OTel Browser SDK's records carry datadog.application.id. They leave
+        # Browser RUM: the OTel Browser SDK's records and spans carry datadog.application.id. They leave
         # the logs pipeline (Datadog exporter, Logs) and take logs/rum (Datadog's OTLP intake),
         # where Datadog routes them to RUM. Everything else is unchanged.
         filter/not_rum:
           logs:
             log_record:
               - 'resource.attributes["datadog.application.id"] != nil'
+          traces:
+            span:
+              - 'resource.attributes["datadog.application.id"] != nil'
         filter/rum_only:
           logs:
             log_record:
+              - 'resource.attributes["datadog.application.id"] == nil'
+          traces:
+            span:
               - 'resource.attributes["datadog.application.id"] == nil'
         resource/rum:
           attributes:
@@ -93,8 +99,14 @@ collectors:
         pipelines:
           # Every trace, before the Datadog sampling pipeline.
           traces:
-            processors: [resource_detection/env, resource/dd_hostname]
+            processors: [resource_detection/env, resource/dd_hostname, filter/not_rum]
             exporters: [datadog/connector, otlp_grpc/jaeger, span_metrics]
+          # Browser spans (datadog.application.id) go to Datadog's OTLP intake, where RUM links
+          # its resources and sessions to them; Jaeger still gets them.
+          traces/rum:
+            receivers: [otlp]
+            processors: [filter/rum_only, resource/rum]
+            exporters: [otlp_http/rum, otlp_grpc/jaeger]
           logs:
             processors: [resource_detection/env, resource/dd_hostname, filter/not_rum]
           logs/rum:

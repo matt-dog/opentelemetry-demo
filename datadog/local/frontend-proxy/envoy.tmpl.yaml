@@ -119,7 +119,11 @@ static_resources:
                             "^/feature", "^/flagservice/", "^/images/", "^/loadgen/", "^/opamp/",
                             "^/telemetry/", "^/profiles/", "^/chatbot/gradio_api/", "^/chatbot/assets/"}
                           local RUM = [[<script src="https://www.datadoghq-browser-agent.com/us1/v7/datadog-rum.js"></script><script>window.DD_RUM&&window.DD_RUM.init({applicationId:"${DD_RUM_APPLICATION_ID}",clientToken:"${DD_RUM_CLIENT_TOKEN}",site:"${DD_RUM_SITE}",service:"frontend-web",env:"${DD_RUM_ENV}",version:"3.1.0",sessionSampleRate:100,sessionReplaySampleRate:100,trackResources:true,trackUserInteractions:true,trackLongTasks:true,defaultPrivacyLevel:"allow",allowedTracingUrls:[{match:function(u){return u.indexOf(location.origin)===0},propagatorTypes:["tracecontext"]}]});</script>]]
+                          -- DD_RUM_INJECT (values-local.yaml): "on" inserts the Datadog SDK;
+                          -- anything else leaves the pages pure OpenTelemetry.
+                          local INJECT = "${DD_RUM_INJECT}" == "on"
                           function envoy_on_request(h)
+                            if not INJECT then return end
                             local p = h:headers():get(":path") or ""
                             for _, pat in ipairs(SKIP) do
                               if p:find(pat) then return end

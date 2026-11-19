@@ -122,9 +122,16 @@ kubectl -n "$NS" delete secret agent-llm --ignore-not-found >/dev/null
 # --force-conflicts: the grant below edits the chart's postgresql-init configmap with
 # kubectl, so Helm's server-side apply finds another owner of init.sql and refuses the
 # upgrade. Helm takes the field back (the chart's init.sql), and the grant is re-added below.
+# FRONTEND_IMAGE=<repository>:<tag> runs a frontend built from this repo's src/frontend
+# (the OpenTelemetry Browser SDK, open-telemetry/opentelemetry-demo#4329) instead of 3.1.0's.
+frontend_set=()
+if [ -n "${FRONTEND_IMAGE:-}" ]; then
+  frontend_set=(--set "components.frontend.imageOverride.repository=${FRONTEND_IMAGE%:*}"
+                --set "components.frontend.imageOverride.tag=${FRONTEND_IMAGE##*:}")
+fi
 helm upgrade --install my-otel-demo open-telemetry/opentelemetry-demo \
   --version "$DEMO_CHART_VERSION" --namespace "$NS" --force-conflicts \
-  --values "$HERE/values-local.yaml" >/dev/null
+  --values "$HERE/values-local.yaml" ${frontend_set[@]+"${frontend_set[@]}"} >/dev/null
 # The agent (patch_vcr.py) and the load generator (locustfile.py) mount files by subPath,
 # which does not follow ConfigMap changes, and Helm does not restart them when only a
 # ConfigMap changed; restart both so this run's files are the ones in use.

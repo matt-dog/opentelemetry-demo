@@ -22,6 +22,7 @@ into git or undone.
 
 | Date | Where | Change | Why | Status |
 |---|---|---|---|---|
+| 2026-11-19 | GCP `dd-dev-otelpmdev`, Artifact Registry | Docker repo `otel-demo` (us-east1) created; `roles/artifactregistry.reader` on it for the nodes' default compute service account (`952320592508-compute@`) | the frontend image built from open-telemetry/opentelemetry-demo#4329 lives there | in place; `gcloud` by hand, not in `up.sh` |
 | 2026-11-18 | DDOT Minus Reinvent26 org, Mosaic | `rum_otel_q4_25` on (rule v9, Bill Meyer, approved by Pablo) | RUM UI for OTel browser data; the backend routing and mapper are GA | on per Slack 17:01Z; internal flag, set outside git |
 | 2026-11-17 | matt-dog org, Downtimes | Downtime `0e2ce626-adac-4458-bc6d-7d4d02c6b536` mutes every `managed_by:otel-demo-local` monitor, no end | the demo moved to DDOT Minus Reinvent26; its monitors there would only go to No Data | active; cancel it if the demo goes back |
 | 2026-11-17 | DDOT Minus Reinvent26 org settings | OTel Semantic Query Mode and `graphing_semantic_metric_names` not checked yet | they were on in matt-dog | check in the UI and Mosaic |
@@ -33,6 +34,42 @@ into git or undone.
 | 2026-10-18 | ddstaging log index `ddot-lab` (UI) | Filter widened to also match `env:otel-demo-gke-blog` app services | App logs fell through to `main`, which drops 99.99% | Redundant since `fc642ea5` (the env has its own index, first in order); can be reverted to `env:ddot-lab service:orders-*` |
 
 ## Log
+
+### 2026-11-19 · The frontend runs the OpenTelemetry Browser SDK (open-telemetry/opentelemetry-demo#4329)
+- **What:** `src/frontend` is the draft PR's (head `16791b45`, Maxime Quentin), which replaces the
+  shop's old browser tracer with `@opentelemetry/browser-sdk`: fetch and XHR spans with
+  `traceparent`, document load, sessions on spans and logs, and the event instrumentations. One
+  patch on top: `PUBLIC_OTEL_RESOURCE_ATTRIBUTES` (`k=v,k=v`, read in `_document.tsx`, merged in
+  `FrontendTracer.ts`), which `values-local.yaml` sets to `datadog.application.id=<RUM app id>`
+  from the `rum-config` secret, next to `PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`.
+  `local/frontend-build.sh` builds the image with Cloud Build (a local build under amd64
+  emulation segfaulted in `next build`, exit 139) and pushes it to
+  `us-east1-docker.pkg.dev/dd-dev-otelpmdev/otel-demo/frontend`; `up.sh` uses it when
+  `FRONTEND_IMAGE` is set, and the upstream 3.1.0 image otherwise. The shopper's
+  `SHOPPER_DATADOG_RUM` and new `SHOPPER_OTEL_BROWSER` are both `off`: the page instruments
+  itself, and without the Datadog SDK its `traceparent` no longer overrides the OTel one.
+- **Why:** Bill Meyer's feedback in the RUM OTel thread was broken APM and RUM correlation; the
+  OTel sessions from 2026-11-18 had `has_ingested_apm_traces: false`, since the browser spans came
+  from the old tracer. Maxime (2026-11-19): `FetchInstrumentation` injects the trace header, and
+  the browser can send through a Collector as a proxy, which is the `/otlp-http` route here. The
+  PR is the upstream version of this work, so the demo follows it instead of `otel-browser.js`.
+- **Also:** the load generator's Playwright browser users (`LOCUST_BROWSER_TRAFFIC_ENABLED`, on in
+  the chart) kept the Datadog SDK after the shopper's switch, and its `traceparent` won on their API
+  calls. frontend-proxy's Lua filter now inserts the Datadog SDK only when `DD_RUM_INJECT` is
+  `on`; `values-local.yaml` sets `off`, so every page is pure OpenTelemetry. And browser spans
+  with `datadog.application.id` take a `traces/rum` pipeline (OTLP intake and Jaeger) and leave the
+  main traces pipeline, the way the logs do.
+- **Checked:** 2026-11-19. Frontend `pr4329-16791b45-dd1` running from 19:50Z, `DD_RUM_INJECT=off`
+  from about 20:00Z, `traces/rum` from 20:06Z. RUM: every event in application `ff1ba9cb` from
+  `telemetry.sdk.name: opentelemetry` (2,551 in 3 minutes, none from the Datadog SDK), about 40
+  sessions in 3 minutes with views, and the session user agent is the browser's
+  (`HeadlessChrome/149`), where the injected script's sessions showed the Collector's. Jaeger:
+  browser fetch traces continue into frontend-proxy, frontend and the backend (up to 6 services);
+  a headless check showed `traceparent` on every `/api/` call and frontend-proxy's span parented on
+  the browser span. APM still gets the browser spans after `traces/rum`.
+- **Not yet:** RUM shows `has_ingested_apm_traces: false` and no `_dd.trace_id` on the OTel
+  resources, both before and after `traces/rum`. Asked of Maxime: what RUM needs to join a resource
+  to its trace.
 
 ### 2026-11-18 · The OTel browser records go to RUM through a DDOT pipeline of their own
 - **What:** `otel-browser/entry.js` sets the resource attribute `datadog.application.id` to the RUM
