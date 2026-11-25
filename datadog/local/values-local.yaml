@@ -24,9 +24,10 @@ opensearch:
 # datadog.log.source, and Datadog maps that to the source tag that picks the
 # pipeline. Without it the services' OTLP logs arrive as source:otlp_log_ingestion
 # and no integration pipeline runs. Same mechanism as
-# DataDog/opentelemetry-examples#555. No annotation where there is no pipeline
-# (currency C++, shipping Rust) or no logs reach Datadog (astronomy-db and
-# valkey-cart: the daemon takes OTLP only, no pod log files).
+# DataDog/opentelemetry-examples#555. It applies to the logs the services send
+# over OTLP and to their container logs, which the DDOT daemon also reads from
+# /var/log/pods. No annotation where there is no pipeline (currency C++,
+# shipping Rust).
 components:
   accounting:
     podAnnotations:
@@ -58,11 +59,13 @@ components:
   mcp:
     podAnnotations:
       resource.opentelemetry.io/datadog.log.source: python
-  # The broker runs the OpenTelemetry Java agent (src/kafka/Dockerfile). Whether its
-  # own logs go out over OTLP is not checked yet; the annotation does nothing if not.
   kafka:
     podAnnotations:
       resource.opentelemetry.io/datadog.log.source: kafka
+  # Valkey has no pipeline of its own; its log format is Redis's.
+  valkey-cart:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: redis
   load-generator:
     podAnnotations:
       resource.opentelemetry.io/datadog.log.source: python
@@ -179,6 +182,8 @@ components:
     # 30 s table lock, one waiting connection each; at the chart's 100Mi Postgres was
     # OOMKilled about four times an hour (2026-10-27), and with no volume each kill wiped
     # the database. The request stays at the chart's 100Mi.
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: postgresql
     resources:
       requests:
         memory: 100Mi
