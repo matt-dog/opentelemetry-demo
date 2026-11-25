@@ -58,10 +58,12 @@ into git or undone.
 - **Deployed:** 2026-11-25 by `helm upgrade` of `my-otel-demo` alone (the chart step of
   `local/up.sh gke`, same values and `FRONTEND_IMAGE`; revision 14 for the first 16 workloads,
   then astronomy-db and valkey-cart). The live values matched git apart from the frontend image.
+  The upgrade reverted the `postgresql-init` grant, as any helm upgrade outside `up.sh` does, so
+  `up.sh`'s grant step was run by hand afterwards: MAINTAIN is back (`t`), 10 products.
 - **Checked:** 2026-11-25, Logs API on `env:otel-demo`. Logs from the new pods carry their
-  `source` and `pod_name` on both the file and the OTLP path, kafka included. The C#, Golang,
-  Java, Ruby, Kafka, NodeJS, python and PHP integration pipelines are installed and enabled in
-  the org. Not checked yet: which processors in each pipeline match the OTel log format.
+  `source` and `pod_name` on both the file and the OTLP path, kafka, postgresql and redis
+  included. The C#, Golang, Java, Ruby, Kafka, NodeJS, python, PHP, Postgresql and Redis
+  integration pipelines are in the org. Not checked yet: which processors in each pipeline match the OTel log format.
 
 ### 2026-11-19 · The frontend runs the OpenTelemetry Browser SDK (open-telemetry/opentelemetry-demo#4329)
 - **What:** `src/frontend` is the draft PR's (head `16791b45`, Maxime Quentin), which replaces the
