@@ -17,8 +17,55 @@ default:
 opensearch:
   enabled: false
 
+# Log source. Each service whose logs have a Datadog log integration pipeline
+# carries the pod annotation resource.opentelemetry.io/datadog.log.source. The
+# kube-stack kubernetesAttributes preset (otel_annotations: true, k8sattributes
+# first in the daemon's logs pipeline) turns it into the resource attribute
+# datadog.log.source, and Datadog maps that to the source tag that picks the
+# pipeline. Without it the services' OTLP logs arrive as source:otlp_log_ingestion
+# and no integration pipeline runs. Same mechanism as
+# DataDog/opentelemetry-examples#555. No annotation where there is no pipeline
+# (currency C++, shipping Rust) or no logs reach Datadog (astronomy-db and
+# valkey-cart: the daemon takes OTLP only, no pod log files).
 components:
+  accounting:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: csharp
+  cart:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: csharp
+  checkout:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: go
+  product-catalog:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: go
+  email:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: ruby
+  payment:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: nodejs
+  quote:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: php
+  recommendation:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: python
+  chatbot:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: python
+  mcp:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: python
+  # The broker runs the OpenTelemetry Java agent (src/kafka/Dockerfile). Whether its
+  # own logs go out over OTLP is not checked yet; the annotation does nothing if not.
+  kafka:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: kafka
   load-generator:
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: python
     envOverrides:
       # The chart points the load generator at :4318 (OTLP/HTTP), but its
       # locustfile exports over gRPC, so its user_* parent spans never arrive and
@@ -37,6 +84,9 @@ components:
     # Browser SDK in place of the shop's old browser tracer; FRONTEND_IMAGE in up.sh). The
     # upstream 3.1.0 image ignores these. Logs take the same /otlp-http route as traces, and
     # datadog.application.id makes Datadog build RUM sessions from the browser's telemetry.
+    # The annotation covers the server's logs only; browser logs go to RUM (logs/rum).
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: nodejs
     envOverrides:
       - name: PUBLIC_OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
         value: http://localhost:8080/otlp-http/v1/logs
@@ -84,6 +134,8 @@ components:
     # prompts in the cassette answer (the chatbot's sample buttons, each a new
     # chat); any other prompt, or a follow-up in the same chat, misses. Claude
     # Haiku 5.5 until 2026-11-12 (CHANGES.md).
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: python
     # vcrpy runs the image's clean_response on every entry it loads, and that
     # drops `usage`, so agent/patch_vcr.py (the image's, keeping usage) is
     # mounted over it from the agent-patch-vcr ConfigMap up.sh makes.
@@ -116,6 +168,8 @@ components:
     # GetAds slows; with no limit its load threads take spare cores and requests
     # stay at a few ms. Memory is the chart's default, restated because this
     # block replaces it.
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: java
     resources:
       limits:
         cpu: 300m
@@ -139,6 +193,9 @@ components:
     # /usr/src/app/opentelemetry-javaagent.jar). Same OTEL_* settings and OTLP
     # endpoint. To swap back, delete this block. ad stays upstream, because the
     # DDOT SDK's logs don't reach Datadog yet (CHANGES.md, 2026-10-18).
+    # Kotlin on the JVM, so the Java pipeline.
+    podAnnotations:
+      resource.opentelemetry.io/datadog.log.source: java
     initContainers:
       - name: ddot-sdk
         image: datadog/dd-otel-autoinstrumentation-java:1.67-preview

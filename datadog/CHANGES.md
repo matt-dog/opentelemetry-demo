@@ -35,6 +35,34 @@ into git or undone.
 
 ## Log
 
+### 2026-11-25 · Service logs carry a log source, so Datadog's integration pipelines run
+- **What:** `local/values-local.yaml` puts the pod annotation
+  `resource.opentelemetry.io/datadog.log.source` on 16 workloads: csharp (accounting, cart),
+  java (ad, fraud-detection), go (checkout, product-catalog), ruby (email), nodejs (frontend,
+  payment), php (quote), python (recommendation, load-generator, agent, chatbot, mcp) and kafka
+  (kafka). The kube-stack `kubernetesAttributes` preset (chart 0.23.0) sets
+  `otel_annotations: true` and puts `k8sattributes` first in the daemon's logs pipeline, so the
+  annotation becomes the resource attribute `datadog.log.source`, which Datadog maps to the
+  `source` tag. None for currency (C++) or shipping (Rust), which have no pipeline, or for
+  astronomy-db and valkey-cart, whose logs don't reach Datadog here (the daemon's logs pipeline
+  takes OTLP only). Kafka runs the OpenTelemetry Java agent, but whether the broker's own logs
+  reach Datadog over OTLP is not checked yet.
+- **Why:** OTLP logs arrive as `source:otlp_log_ingestion`, so no integration pipeline parses
+  them. Cyrille Le Clerc showed in a Slack thread (2026-11-25) that the annotation turns the
+  pipelines on, and merged the same change in DataDog/opentelemetry-examples#555. Igor
+  Peschinskii confirmed that the OTLP logs intake maps the attribute too. Cyrille calls setting it
+  by hand a workaround that should be auto-discovered; the demo shows the workaround.
+- **Also:** the older chart-collector path (`my-values-file.yml`, `datadog/up.sh`) still sets the
+  source its own way in `transform/log_source`: `ddtags` `source:kafka` and `source:redis` on
+  log records, `datadog.log.source` `postgresql` on the resource. Left as it is, since it's not
+  what `local/up.sh` deploys.
+- **Checked:** `helm template` (chart 0.42.1, `values-local.yaml`) renders the annotation on
+  the 16 Deployments. Not deployed yet; the gcloud sign-in had expired. After `up.sh gke`, check
+  in Log Explorer on `env:otel-demo` that service logs carry pod tags (`pod_name`,
+  `kube_deployment`) as well as `source:java` and the others, and that each log shows its
+  integration pipeline. Pod tags without a source would mean the annotation is missing; no pod
+  tags would mean `k8sattributes` didn't match the OTLP logs to their pods.
+
 ### 2026-11-19 · The frontend runs the OpenTelemetry Browser SDK (open-telemetry/opentelemetry-demo#4329)
 - **What:** `src/frontend` is the draft PR's (head `16791b45`, Maxime Quentin), which replaces the
   shop's old browser tracer with `@opentelemetry/browser-sdk`: fetch and XHR spans with
